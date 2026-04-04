@@ -2,12 +2,32 @@
   "migIndex": 1,
   "data": [
     {
-      "path": "assets/fonts/SpaceMono-Bold.ttf",
-      "sha1": "9ab8d86623be53ab9fd656e3448d2a6da166d6cf"
+      "path": "assets/fonts/Roboto-Bold.ttf",
+      "sha1": "3e455f517354a45807648fbd3d71adbab2f4e905"
     },
     {
-      "path": "assets/fonts/SpaceMono-Regular.ttf",
-      "sha1": "59d102868a3072bf9034efb4b2a41ff6741a297b"
+      "path": "assets/fonts/Roboto-Medium.ttf",
+      "sha1": "f81633398187756a347bc6d43aad7a8fc356171b"
+    },
+    {
+      "path": "assets/fonts/Roboto-Regular.ttf",
+      "sha1": "cb6cc5710764b9f06b8d8c923f961e3c1ceb7a59"
+    },
+    {
+      "path": "assets/fonts/Teachers-Bold.ttf",
+      "sha1": "d6c23a8580d9d27ca6a5acace600764b47904a69"
+    },
+    {
+      "path": "assets/fonts/Teachers-Medium.ttf",
+      "sha1": "b5b754c2949357f84b57e53cc60a2ec30c6dcb35"
+    },
+    {
+      "path": "assets/fonts/Teachers-Regular.ttf",
+      "sha1": "e29492808bd20e69d249c655d48b3bc52e62953d"
+    },
+    {
+      "path": "assets/fonts/Teachers.ttf",
+      "sha1": "5e238418246d59babafa4dc667b638efd01be468"
     }
   ]
 }

@@ -28,7 +28,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
       <View style={[styles.overlay, {paddingTop: Math.max(insets.top, spacing.xl)}]}>
         <View pointerEvents="none" style={styles.antiBandingLayer} />
 
-        {/* Ensures the top phone status bar text is white against the dark background */}
         <StatusBar
           barStyle="light-content"
           translucent={Platform.OS === 'android'}
@@ -36,14 +35,10 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         />
 
         <View style={styles.contentContainer}>
-          {/* Increased size for the header */}
           <Text style={styles.title}>Attendify</Text>
-
-          {/* Optional subtitle to anchor the massive text */}
           <Text style={styles.subtitle}>Streamlined campus attendance</Text>
         </View>
 
-        {/* Larger button for better tap targets and visual weight */}
         <TouchableOpacity style={styles.googleButton} onPress={onLogin}>
           <Text style={styles.googleButtonText}>Get Started</Text>
         </TouchableOpacity>
@@ -72,15 +67,15 @@ const styles = StyleSheet.create({
     marginBottom: 80,
   },
   title: {
-    fontSize: 68, // Increased from 56 to 72
-    fontFamily: typography.spaceMonoBold,
+    fontSize: 68,
+    fontFamily: typography.primaryBold,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -2, // Tightened slightly more to compensate for the larger font size
+    letterSpacing: -2,
   },
   subtitle: {
-    fontSize: 16, // Bumped slightly from 16 to 18 to balance the huge title
-    fontFamily: typography.spaceMonoRegular,
+    fontSize: 16,
+    fontFamily: typography.primaryRegular,
     color: '#FFFFFF',
     opacity: 0.8,
     marginTop: spacing.sm,
@@ -88,10 +83,10 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     backgroundColor: '#E6A817',
-    paddingVertical: 22, // Increased from 18
-    paddingHorizontal: 56, // Increased from 40
+    paddingVertical: 22,
+    paddingHorizontal: 56,
     borderRadius: 100,
-    elevation: 6, // Slightly increased shadow to match the bigger size
+    elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
@@ -99,7 +94,7 @@ const styles = StyleSheet.create({
   },
   googleButtonText: {
     color: '#3B0918',
-    fontSize: 20, // Increased from 18 to 22
-    fontFamily: typography.spaceMonoRegular,
+    fontSize: 20,
+    fontFamily: typography.primaryBold,
   },
 });

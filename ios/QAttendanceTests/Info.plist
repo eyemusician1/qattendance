@@ -22,8 +22,13 @@
 	<string>1</string>
 	<key>UIAppFonts</key>
 	<array>
-		<string>SpaceMono-Bold.ttf</string>
-		<string>SpaceMono-Regular.ttf</string>
+		<string>Roboto-Bold.ttf</string>
+		<string>Roboto-Medium.ttf</string>
+		<string>Roboto-Regular.ttf</string>
+		<string>Teachers-Bold.ttf</string>
+		<string>Teachers-Medium.ttf</string>
+		<string>Teachers-Regular.ttf</string>
+		<string>Teachers.ttf</string>
 	</array>
 </dict>
 </plist>

@@ -1,10 +1,15 @@
+// src/tokens/typography.ts
 export const typography = {
   /**
-   * Serif accent font. On Android, bundle Georgia.ttf in assets/fonts/
-   * and run: npx react-native-asset
-   * On iOS, Georgia is available as a system font.
+   * Serif accent font. Used for big branding moments (like the Login Screen).
    */
   serif: 'Georgia',
-  spaceMonoRegular: 'SpaceMono-Regular',
-  spaceMonoBold: 'SpaceMono-Bold',
+
+  /**
+   * Primary UI Fonts for the Dashboard and Cards.
+   * Using Roboto for the authentic Google Material Design look.
+   */
+  primaryRegular: 'Roboto-Regular',
+  primaryMedium: 'Roboto-Medium',
+  primaryBold: 'Roboto-Bold',
 } as const;

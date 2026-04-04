@@ -1,4 +1,4 @@
-package com.qattendance
+package com.attendify
 
 import android.app.Application
 import com.facebook.react.PackageList

@@ -1,15 +1,21 @@
 // src/screens/HomeScreen.tsx
-import React, { useState } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { palette, spacing, typography } from '../tokens';
 import { useRole } from '../context/RoleContext';
 
 export function HomeScreen() {
   const { role } = useRole();
+  const insets = useSafeAreaInsets();
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.pageTitle}>Dashboard</Text>
 
       {/* ========================================== */}
@@ -20,10 +26,10 @@ export function HomeScreen() {
           <View style={[styles.cardFull, styles.alertCard]}>
             <View style={styles.cardHeaderRow}>
               <Text style={styles.alertLabel}>Attendance Warning</Text>
-              <Text style={styles.subtleTag}>STATUS</Text>
+              <Text style={styles.alertTag}>STATUS</Text>
             </View>
-            <View>
-              <Text style={styles.cardHeader}>IT302 Limit Nearing</Text>
+            <View style={styles.cardBody}>
+              <Text style={styles.alertHeader}>IT302 Limit Nearing</Text>
             </View>
           </View>
 
@@ -34,20 +40,27 @@ export function HomeScreen() {
               </View>
               <Text style={styles.subtleTag}>LIVE SESSION</Text>
             </View>
-            <View>
+            <View style={styles.cardBody}>
               <Text style={styles.cardHeader}>Information Assurance</Text>
               <Text style={styles.cardSub}>10:00 AM • Room 402</Text>
             </View>
           </View>
 
           <View style={styles.bentoRow}>
-            <TouchableOpacity style={[styles.bentoSquare, styles.bgPrimary]}>
-              <Ionicons name="arrow-forward-outline" size={20} color={palette.white} style={styles.squareIconLight} />
+            {/* Primary Action: Solid Maroon with a Checkmark */}
+            <TouchableOpacity style={[styles.bentoSquare, styles.bgPrimary]} activeOpacity={0.85}>
+              <Ionicons
+                name="checkmark-outline"
+                size={26}
+                color={palette.white}
+                style={[styles.squareIconLight, { transform: [{ rotate: '0deg' }] }]}
+              />
               <Text style={styles.squareTextLight}>Mark Present</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.bentoSquare, styles.bgSurface]}>
-              <Ionicons name="arrow-forward-outline" size={20} color={palette.ink} style={styles.squareIconDark} />
+            {/* Secondary Action: Clean White Surface */}
+            <TouchableOpacity style={[styles.bentoSquare, styles.bgSurface]} activeOpacity={0.85}>
+              <Ionicons name="arrow-forward-outline" size={24} color={palette.ink} style={styles.squareIconDark} />
               <Text style={styles.squareTextDark}>Join Class</Text>
             </TouchableOpacity>
           </View>
@@ -64,20 +77,22 @@ export function HomeScreen() {
               <Text style={styles.label}>Next Class</Text>
               <Text style={styles.subtleTag}>SCHEDULE</Text>
             </View>
-            <View>
+            <View style={styles.cardBody}>
               <Text style={styles.cardHeader}>Software Engineering</Text>
               <Text style={styles.cardSub}>In 15 mins • Lab B</Text>
             </View>
           </View>
 
           <View style={styles.bentoRow}>
-            <TouchableOpacity style={[styles.bentoSquare, styles.bgPrimary]}>
-              <Ionicons name="arrow-forward-outline" size={20} color={palette.white} style={styles.squareIconLight} />
+            {/* Primary Action: Solid Maroon */}
+            <TouchableOpacity style={[styles.bentoSquare, styles.bgPrimary]} activeOpacity={0.85}>
+              <Ionicons name="arrow-forward-outline" size={24} color={palette.white} style={styles.squareIconLight} />
               <Text style={styles.squareTextLight}>Roll Call</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.bentoSquare, styles.bgSurface]}>
-              <Ionicons name="arrow-forward-outline" size={20} color={palette.ink} style={styles.squareIconDark} />
+            {/* Secondary Action: Clean White Surface */}
+            <TouchableOpacity style={[styles.bentoSquare, styles.bgSurface]} activeOpacity={0.85}>
+              <Ionicons name="arrow-forward-outline" size={24} color={palette.ink} style={styles.squareIconDark} />
               <Text style={styles.squareTextDark}>New Meeting</Text>
             </TouchableOpacity>
           </View>
@@ -85,11 +100,11 @@ export function HomeScreen() {
           <View style={[styles.cardFull, styles.alertCard]}>
              <View style={styles.cardHeaderRow}>
                <Text style={styles.alertLabel}>Attention Required</Text>
-               <Text style={styles.subtleTag}>STATUS</Text>
+               <Text style={styles.alertTag}>STATUS</Text>
              </View>
-             <View>
-               <Text style={styles.cardHeader}>3 Critical Students</Text>
-               <Text style={styles.cardSub}>2 pending reviews</Text>
+             <View style={styles.cardBody}>
+               <Text style={styles.alertHeader}>3 Critical Students</Text>
+               <Text style={styles.alertSub}>2 pending reviews</Text>
              </View>
           </View>
         </View>
@@ -100,25 +115,27 @@ export function HomeScreen() {
       {/* ========================================== */}
       {role === 'admin' && (
         <View style={styles.bentoContainer}>
-          <View style={[styles.cardFull, styles.adminAlertCard]}>
+          <View style={[styles.cardFull, styles.alertCard]}>
             <View style={styles.cardHeaderRow}>
-              <Text style={styles.adminAlertLabel}>Action Needed</Text>
-              <Text style={styles.subtleTag}>URGENT</Text>
+              <Text style={styles.alertLabel}>Action Needed</Text>
+              <Text style={styles.alertTag}>URGENT</Text>
             </View>
-            <View>
-              <Text style={styles.cardHeader}>4 Pending Requests</Text>
-              <Text style={styles.cardSub}>Teacher role approvals</Text>
+            <View style={styles.cardBody}>
+              <Text style={styles.alertHeader}>4 Pending Requests</Text>
+              <Text style={styles.alertSub}>Teacher role approvals</Text>
             </View>
           </View>
 
           <View style={styles.bentoRow}>
-            <TouchableOpacity style={[styles.bentoSquare, styles.bgPrimary]}>
-              <Ionicons name="arrow-forward-outline" size={20} color={palette.white} style={styles.squareIconLight} />
+            {/* Primary Action: Solid Maroon */}
+            <TouchableOpacity style={[styles.bentoSquare, styles.bgPrimary]} activeOpacity={0.85}>
+              <Ionicons name="arrow-forward-outline" size={24} color={palette.white} style={styles.squareIconLight} />
               <Text style={styles.squareTextLight}>Review</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.bentoSquare, styles.bgSurface]}>
-              <Ionicons name="arrow-forward-outline" size={20} color={palette.ink} style={styles.squareIconDark} />
+            {/* Secondary Action: Clean White Surface */}
+            <TouchableOpacity style={[styles.bentoSquare, styles.bgSurface]} activeOpacity={0.85}>
+              <Ionicons name="arrow-forward-outline" size={24} color={palette.ink} style={styles.squareIconDark} />
               <Text style={styles.squareTextDark}>Sync Status</Text>
             </TouchableOpacity>
           </View>
@@ -134,7 +151,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.bg,
   },
   content: {
-    padding: spacing.xl,
+    paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xxxl * 2,
   },
   pageTitle: {
@@ -164,117 +181,71 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 12,
   },
+
   alertCard: {
-    backgroundColor: '#FBEED2',
-    borderColor: '#EBD197',
+    backgroundColor: palette.secondarySoft,
+    borderColor: palette.secondary,
+    borderWidth: 1,
   },
-  adminAlertCard: {
-    backgroundColor: '#F5D0D3',
-    borderColor: '#E2AEB3',
-  },
+
   cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'flex-start'
   },
-  subtleTag: {
-    fontFamily: typography.primaryRegular,
-    fontSize: 10,
-    color: palette.muted,
-    opacity: 0.5,
-    letterSpacing: 1,
+  cardBody: {
+    gap: 4,
   },
+  subtleTag: { fontFamily: typography.primaryBold, fontSize: 10, color: palette.primary, letterSpacing: 1 },
+  alertTag: { fontFamily: typography.primaryBold, fontSize: 10, color: palette.ink, letterSpacing: 1 },
+
   squareIconLight: {
     position: 'absolute',
     top: spacing.xl,
     right: spacing.xl,
-    opacity: 0.6,
-    transform: [{ rotate: '-45deg' }],
+    opacity: 0.7,
+    transform: [{ rotate: '-45deg' }]
   },
   squareIconDark: {
     position: 'absolute',
     top: spacing.xl,
     right: spacing.xl,
     opacity: 0.4,
-    transform: [{ rotate: '-45deg' }],
+    transform: [{ rotate: '-45deg' }]
   },
+
   bentoSquare: {
     flex: 1,
     aspectRatio: 1,
     borderRadius: 24,
     padding: spacing.xl,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
     elevation: 2,
     shadowColor: palette.ink,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 12,
   },
-  bgPrimary: {
-    backgroundColor: palette.primary,
-  },
+  bgPrimary: { backgroundColor: palette.primary },
+
   bgSurface: {
     backgroundColor: palette.white,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: palette.border
   },
-  label: {
-    color: palette.muted,
-    fontSize: 13,
-    fontFamily: typography.primaryRegular,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  alertLabel: {
-    color: '#8A6A24',
-    fontSize: 13,
-    fontFamily: typography.primaryBold,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  adminAlertLabel: {
-    color: '#802B32',
-    fontSize: 13,
-    fontFamily: typography.primaryBold,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  cardHeader: {
-    color: palette.ink,
-    fontSize: 24,
-    fontFamily: typography.primaryBold,
-    marginBottom: 4,
-  },
-  cardSub: {
-    color: palette.body,
-    fontSize: 16,
-    fontFamily: typography.primaryRegular,
-  },
-  squareTextLight: {
-    color: palette.white,
-    fontSize: 20,
-    fontFamily: typography.primaryBold,
-    textAlign: 'center',
-  },
-  squareTextDark: {
-    color: palette.ink,
-    fontSize: 20,
-    fontFamily: typography.primaryBold,
-    textAlign: 'center',
-  },
-  badgeActive: {
-    alignSelf: 'flex-start',
-    backgroundColor: palette.ink,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: 100,
-  },
-  badgeTextActive: {
-    color: palette.surface,
-    fontFamily: typography.primaryBold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
+
+  label: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryRegular, textTransform: 'uppercase', letterSpacing: 1 },
+  alertLabel: { color: palette.ink, fontSize: 13, fontFamily: typography.primaryBold, textTransform: 'uppercase', letterSpacing: 1 },
+
+  cardHeader: { color: palette.ink, fontSize: 24, fontFamily: typography.primaryBold },
+  alertHeader: { color: palette.ink, fontSize: 24, fontFamily: typography.primaryBold },
+
+  cardSub: { color: palette.muted, fontSize: 15, fontFamily: typography.primaryRegular },
+  alertSub: { color: palette.ink, fontSize: 15, fontFamily: typography.primaryRegular },
+
+  squareTextLight: { color: palette.white, fontSize: 18, fontFamily: typography.primaryBold },
+  squareTextDark: { color: palette.ink, fontSize: 18, fontFamily: typography.primaryBold },
+
+  badgeActive: { alignSelf: 'flex-start', backgroundColor: palette.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 100 },
+  badgeTextActive: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
 });

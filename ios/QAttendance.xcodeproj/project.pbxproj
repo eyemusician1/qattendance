@@ -14,13 +14,9 @@
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
 		7699B88040F8A987B510C191 /* libPods-QAttendance-QAttendanceTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 19F6CBCC0A4E27FBF8BF4A61 /* libPods-QAttendance-QAttendanceTests.a */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
-		590D2AA04C2946F182A5C9A5 /* Roboto-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B974D654C1144F8BAAB7BF7B /* Roboto-Bold.ttf */; };
-		5A47A07B2B10415B8F57BA58 /* Roboto-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 31B275A79F434E6D9CDD1CDF /* Roboto-Medium.ttf */; };
-		14A3840A0E434B0C8EF2CE2B /* Roboto-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2CAE771AAC5440B58D5AC663 /* Roboto-Regular.ttf */; };
-		513B0087ED2245BC959B335A /* Teachers-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 14528A5A853749E987E3BE41 /* Teachers-Bold.ttf */; };
-		4C1DE49F7ECA421FA17F11E5 /* Teachers-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8ADA2006B69C46DF8648B6E3 /* Teachers-Medium.ttf */; };
-		B5A8D498388B4BE8816899CA /* Teachers-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D0724B2316DC45ACABAA266B /* Teachers-Regular.ttf */; };
-		01CDEB7A801A45E9A78C482A /* Teachers.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 44186D173AA24211B931F30F /* Teachers.ttf */; };
+		EBC0014E1F124D8A860B1F0A /* GoogleSans-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = BDC16A248C4C4BE58CBF6001 /* GoogleSans-Bold.ttf */; };
+		5586C032F2F54C91A86DDE07 /* GoogleSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C8B507D0D79E42B9A21A260C /* GoogleSans-Medium.ttf */; };
+		94284DA1E1974DB6B886D39A /* GoogleSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8103130974614891A045DBED /* GoogleSans-Regular.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,13 +48,9 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = QAttendance/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		89C6BE57DB24E9ADA2F236DE /* Pods-QAttendance-QAttendanceTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-QAttendance-QAttendanceTests.release.xcconfig"; path = "Target Support Files/Pods-QAttendance-QAttendanceTests/Pods-QAttendance-QAttendanceTests.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		B974D654C1144F8BAAB7BF7B /* Roboto-Bold.ttf */ = {isa = PBXFileReference; name = "Roboto-Bold.ttf"; path = "../assets/fonts/Roboto-Bold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		31B275A79F434E6D9CDD1CDF /* Roboto-Medium.ttf */ = {isa = PBXFileReference; name = "Roboto-Medium.ttf"; path = "../assets/fonts/Roboto-Medium.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		2CAE771AAC5440B58D5AC663 /* Roboto-Regular.ttf */ = {isa = PBXFileReference; name = "Roboto-Regular.ttf"; path = "../assets/fonts/Roboto-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		14528A5A853749E987E3BE41 /* Teachers-Bold.ttf */ = {isa = PBXFileReference; name = "Teachers-Bold.ttf"; path = "../assets/fonts/Teachers-Bold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		8ADA2006B69C46DF8648B6E3 /* Teachers-Medium.ttf */ = {isa = PBXFileReference; name = "Teachers-Medium.ttf"; path = "../assets/fonts/Teachers-Medium.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		D0724B2316DC45ACABAA266B /* Teachers-Regular.ttf */ = {isa = PBXFileReference; name = "Teachers-Regular.ttf"; path = "../assets/fonts/Teachers-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		44186D173AA24211B931F30F /* Teachers.ttf */ = {isa = PBXFileReference; name = "Teachers.ttf"; path = "../assets/fonts/Teachers.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		BDC16A248C4C4BE58CBF6001 /* GoogleSans-Bold.ttf */ = {isa = PBXFileReference; name = "GoogleSans-Bold.ttf"; path = "../assets/fonts/GoogleSans-Bold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		C8B507D0D79E42B9A21A260C /* GoogleSans-Medium.ttf */ = {isa = PBXFileReference; name = "GoogleSans-Medium.ttf"; path = "../assets/fonts/GoogleSans-Medium.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
+		8103130974614891A045DBED /* GoogleSans-Regular.ttf */ = {isa = PBXFileReference; name = "GoogleSans-Regular.ttf"; path = "../assets/fonts/GoogleSans-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -168,13 +160,9 @@
 		F3982BC728624A7EA52DD19B /* Resources */ = {
 			isa = "PBXGroup";
 			children = (
-				B974D654C1144F8BAAB7BF7B /* Roboto-Bold.ttf */,
-				31B275A79F434E6D9CDD1CDF /* Roboto-Medium.ttf */,
-				2CAE771AAC5440B58D5AC663 /* Roboto-Regular.ttf */,
-				14528A5A853749E987E3BE41 /* Teachers-Bold.ttf */,
-				8ADA2006B69C46DF8648B6E3 /* Teachers-Medium.ttf */,
-				D0724B2316DC45ACABAA266B /* Teachers-Regular.ttf */,
-				44186D173AA24211B931F30F /* Teachers.ttf */,
+				BDC16A248C4C4BE58CBF6001 /* GoogleSans-Bold.ttf */,
+				C8B507D0D79E42B9A21A260C /* GoogleSans-Medium.ttf */,
+				8103130974614891A045DBED /* GoogleSans-Regular.ttf */,
 			);
 			name = Resources;
 			sourceTree = "<group>";
@@ -275,13 +263,9 @@
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
-				590D2AA04C2946F182A5C9A5 /* Roboto-Bold.ttf in Resources */,
-				5A47A07B2B10415B8F57BA58 /* Roboto-Medium.ttf in Resources */,
-				14A3840A0E434B0C8EF2CE2B /* Roboto-Regular.ttf in Resources */,
-				513B0087ED2245BC959B335A /* Teachers-Bold.ttf in Resources */,
-				4C1DE49F7ECA421FA17F11E5 /* Teachers-Medium.ttf in Resources */,
-				B5A8D498388B4BE8816899CA /* Teachers-Regular.ttf in Resources */,
-				01CDEB7A801A45E9A78C482A /* Teachers.ttf in Resources */,
+				EBC0014E1F124D8A860B1F0A /* GoogleSans-Bold.ttf in Resources */,
+				5586C032F2F54C91A86DDE07 /* GoogleSans-Medium.ttf in Resources */,
+				94284DA1E1974DB6B886D39A /* GoogleSans-Regular.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

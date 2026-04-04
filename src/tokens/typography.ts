@@ -7,9 +7,9 @@ export const typography = {
 
   /**
    * Primary UI Fonts for the Dashboard and Cards.
-   * Using Roboto for the authentic Google Material Design look.
+   * Use bundled GoogleSans variants across primary UI surfaces.
    */
-  primaryRegular: 'Roboto-Regular',
-  primaryMedium: 'Roboto-Medium',
-  primaryBold: 'Roboto-Bold',
+  primaryRegular: 'GoogleSans-Regular',
+  primaryMedium: 'GoogleSans-Medium',
+  primaryBold: 'GoogleSans-Bold',
 } as const;

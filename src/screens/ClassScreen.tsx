@@ -1,11 +1,17 @@
 // src/screens/ClassScreen.tsx
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { palette, spacing, typography } from '../tokens';
 import { useRole } from '../context/RoleContext';
 
-// --- MOCK DATA ---
 const STUDENT_CLASSES = [
   { id: '1', code: 'IT302', name: 'Data Structures', section: 'A1', schedule: 'Mon/Wed • 10:00 AM', status: 'Perfect Attendance', isWarning: false },
   { id: '2', code: 'CS411', name: 'Information Assurance', section: 'B2', schedule: 'Tue/Thu • 1:00 PM', status: 'Warning: 2 Absences', isWarning: true },
@@ -19,80 +25,72 @@ const TEACHER_CLASSES = [
 
 export function ClassScreen() {
   const { role } = useRole();
+  const insets = useSafeAreaInsets();
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.pageTitle}>My Classes</Text>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <Text style={styles.pageTitle}>My Classes</Text>
+      </View>
 
-      {/* ========================================== */}
-      {/* STUDENT CLASS LIST                           */}
-      {/* ========================================== */}
-      {role === 'student' && (
-        <View style={styles.listContainer}>
-          {STUDENT_CLASSES.map((cls) => (
-            <TouchableOpacity key={cls.id} style={styles.classCard} activeOpacity={0.7}>
-
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.classCode}>{cls.code} • {cls.section}</Text>
-                <Ionicons name="arrow-forward-outline" size={20} color={palette.muted} style={styles.navIcon} />
-              </View>
-
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── STUDENT ── */}
+        {role === 'student' && STUDENT_CLASSES.map((cls) => (
+          <TouchableOpacity key={cls.id} style={styles.classCard} activeOpacity={0.7}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.classCode}>{cls.code} • {cls.section}</Text>
+              <Ionicons name="arrow-forward-outline" size={20} color={palette.primary} style={styles.navIcon} />
+            </View>
+            <View style={styles.cardBody}>
               <Text style={styles.className}>{cls.name}</Text>
               <Text style={styles.classSchedule}>{cls.schedule}</Text>
+            </View>
+            <View style={[styles.snapshotPill, cls.isWarning && styles.snapshotPillWarning]}>
+              <Text style={[styles.snapshotText, cls.isWarning && styles.snapshotTextWarning]}>
+                {cls.status}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
 
-              {/* Current Week Snapshot */}
-              <View style={[styles.snapshotPill, cls.isWarning && styles.snapshotPillWarning]}>
-                <Text style={[styles.snapshotText, cls.isWarning && styles.snapshotTextWarning]}>
-                  {cls.status}
-                </Text>
-              </View>
-
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* ========================================== */}
-      {/* TEACHER CLASS LIST                           */}
-      {/* ========================================== */}
-      {role === 'teacher' && (
-        <View style={styles.listContainer}>
-          {TEACHER_CLASSES.map((cls) => (
-            <TouchableOpacity key={cls.id} style={styles.classCard} activeOpacity={0.7}>
-
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.classCode}>{cls.code} • {cls.section}</Text>
-                <Ionicons name="arrow-forward-outline" size={20} color={palette.muted} style={styles.navIcon} />
-              </View>
-
+        {/* ── TEACHER ── */}
+        {role === 'teacher' && TEACHER_CLASSES.map((cls) => (
+          <TouchableOpacity key={cls.id} style={styles.classCard} activeOpacity={0.7}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.classCode}>{cls.code} • {cls.section}</Text>
+              <Ionicons name="arrow-forward-outline" size={20} color={palette.primary} style={styles.navIcon} />
+            </View>
+            <View style={styles.cardBody}>
               <Text style={styles.className}>{cls.name}</Text>
               <Text style={styles.classSchedule}>{cls.schedule}</Text>
-
-              {/* Teacher Snapshot */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotPill}>
-                  <Text style={styles.snapshotText}>{cls.enrolled} Enrolled</Text>
+            </View>
+            <View style={styles.pillRow}>
+              <View style={styles.snapshotPill}>
+                <Text style={styles.snapshotText}>{cls.enrolled} Enrolled</Text>
+              </View>
+              {cls.pending > 0 && (
+                <View style={styles.snapshotPillWarning}>
+                  <Text style={styles.snapshotTextWarning}>{cls.pending} Needs Review</Text>
                 </View>
-                {cls.pending > 0 && (
-                  <View style={styles.snapshotPillWarning}>
-                    <Text style={styles.snapshotTextWarning}>{cls.pending} Needs Review</Text>
-                  </View>
-                )}
-              </View>
+              )}
+            </View>
+          </TouchableOpacity>
+        ))}
 
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {/* Admin empty state for now */}
-      {role === 'admin' && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>Admins manage classes via the System Dashboard.</Text>
-        </View>
-      )}
-
-    </ScrollView>
+        {/* ── ADMIN ── */}
+        {role === 'admin' && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Admins manage classes via the System Dashboard.
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -101,17 +99,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.bg,
   },
-  content: {
-    padding: spacing.xl,
-    paddingBottom: spacing.xxxl * 2,
+  header: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
+    backgroundColor: palette.bg,
   },
   pageTitle: {
     color: palette.ink,
     fontSize: 42,
     fontFamily: typography.primaryBold,
-    marginBottom: spacing.xxxl,
   },
-  listContainer: {
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxxl * 2,
     gap: spacing.lg,
   },
   classCard: {
@@ -120,6 +125,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     borderWidth: 1,
     borderColor: palette.border,
+    gap: spacing.md,
     elevation: 2,
     shadowColor: palette.ink,
     shadowOffset: { width: 0, height: 4 },
@@ -130,57 +136,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
   },
   classCode: {
-    color: palette.muted,
-    fontSize: 13,
-    fontFamily: typography.primaryMedium,
+    color: palette.primary, // Subtle Maroon accent
+    fontSize: 12,
+    fontFamily: typography.primaryBold,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
   navIcon: {
-    transform: [{ rotate: '-45deg' }],
+    opacity: 0.6, // Softens the maroon so it isn't too heavy
+    transform: [{ rotate: '-45deg' }], // Matches the diagonal arrow from HomeScreen
+  },
+  cardBody: {
+    gap: spacing.xs,
   },
   className: {
     color: palette.ink,
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: typography.primaryBold,
-    marginBottom: spacing.xs,
   },
   classSchedule: {
-    color: palette.body,
+    color: palette.muted,
     fontSize: 15,
     fontFamily: typography.primaryRegular,
-    marginBottom: spacing.lg,
   },
-  snapshotRow: {
+  pillRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   snapshotPill: {
     alignSelf: 'flex-start',
-    backgroundColor: palette.surface,
+    backgroundColor: palette.bg, // Updated to bg for slightly more contrast than surface
+    borderWidth: 1,
+    borderColor: palette.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: 100,
   },
   snapshotText: {
     color: palette.ink,
-    fontFamily: typography.primaryMedium,
+    fontFamily: typography.primaryBold,
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   snapshotPillWarning: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FBEED2',
+    backgroundColor: palette.secondarySoft, // Soft cream background
+    borderColor: palette.secondary, // Elegant gold border
+    borderWidth: 1,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: 100,
   },
   snapshotTextWarning: {
-    color: '#8A6A24',
+    color: palette.ink, // High contrast ink
     fontFamily: typography.primaryBold,
     fontSize: 11,
     textTransform: 'uppercase',

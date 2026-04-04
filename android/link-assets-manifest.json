@@ -2,32 +2,16 @@
   "migIndex": 1,
   "data": [
     {
-      "path": "assets/fonts/Roboto-Bold.ttf",
-      "sha1": "3e455f517354a45807648fbd3d71adbab2f4e905"
+      "path": "assets/fonts/GoogleSans-Bold.ttf",
+      "sha1": "2e577a5eecfc65e5e34bc948d4c4f846207c4612"
     },
     {
-      "path": "assets/fonts/Roboto-Medium.ttf",
-      "sha1": "f81633398187756a347bc6d43aad7a8fc356171b"
+      "path": "assets/fonts/GoogleSans-Medium.ttf",
+      "sha1": "9a24eecc0bc0c617199a6801752a42c00c7f1319"
     },
     {
-      "path": "assets/fonts/Roboto-Regular.ttf",
-      "sha1": "cb6cc5710764b9f06b8d8c923f961e3c1ceb7a59"
-    },
-    {
-      "path": "assets/fonts/Teachers-Bold.ttf",
-      "sha1": "d6c23a8580d9d27ca6a5acace600764b47904a69"
-    },
-    {
-      "path": "assets/fonts/Teachers-Medium.ttf",
-      "sha1": "b5b754c2949357f84b57e53cc60a2ec30c6dcb35"
-    },
-    {
-      "path": "assets/fonts/Teachers-Regular.ttf",
-      "sha1": "e29492808bd20e69d249c655d48b3bc52e62953d"
-    },
-    {
-      "path": "assets/fonts/Teachers.ttf",
-      "sha1": "5e238418246d59babafa4dc667b638efd01be468"
+      "path": "assets/fonts/GoogleSans-Regular.ttf",
+      "sha1": "33a5cb17dc4743ee95efe6dc4b3f75a38c5acbf7"
     }
   ]
 }

@@ -11,13 +11,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { palette, spacing, typography } from '../tokens';
 import { useRole } from '../context/RoleContext';
+import { useAuth } from '../context/AuthContext';
 
 type ProfileScreenProps = {
   onLogout: () => void;
 };
 
 const USER_PROFILE = {
-  name: 'MSUAN', // Updated back to your name!
   attendanceRate: '96%',
   streak: '14',
 };
@@ -25,7 +25,8 @@ const USER_PROFILE = {
 const TAB_BAR_HEIGHT = 64;
 
 export function ProfileScreen({ onLogout }: ProfileScreenProps) {
-  const { role, cycleRole } = useRole();
+  const { role } = useRole();
+  const { fullName } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -39,10 +40,11 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
   // Sections:
   const TITLE_H = 52 + spacing.xl;
   const SQUARE_SIZE = (width - H_PAD * 2 - GAP) / 2;
-  const LOGOUT_H = 56;
+  const LOGOUT_H = 72; // Increased from 56 for a much larger, prominent button
   const ACTION_CARD_H = 64;
-  const NUM_GAPS = 5;
-  const remaining = usableHeight - TITLE_H - SQUARE_SIZE - LOGOUT_H - ACTION_CARD_H * 2 - GAP * NUM_GAPS - H_PAD * 2;
+
+  const NUM_GAPS = 4;
+  const remaining = usableHeight - TITLE_H - SQUARE_SIZE - LOGOUT_H - (ACTION_CARD_H * 1) - (GAP * NUM_GAPS) - (H_PAD * 2);
 
   // remaining goes to the identity card
   const identityCardH = Math.max(remaining, 120);
@@ -52,10 +54,10 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
       <View style={styles.content}>
         <Text style={styles.pageTitle}>Profile</Text>
 
-        {/* ── CLEAN SURFACE IDENTITY CARD (Matches Dashboard) ── */}
+        {/* ── CLEAN SURFACE IDENTITY CARD ── */}
         <View style={[styles.identityCard, { height: identityCardH }]}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.userName} numberOfLines={2}>{USER_PROFILE.name}</Text>
+            <Text style={styles.userName} numberOfLines={2}>{fullName}</Text>
             <Text style={styles.subtleTag}>ACCOUNT</Text>
           </View>
           <View style={styles.chipRow}>
@@ -70,17 +72,30 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           </View>
         </View>
 
-        {/* ── STATS BENTO ── */}
-        <View style={styles.bentoRow}>
-          <View style={[styles.bentoSquare, { width: SQUARE_SIZE, height: SQUARE_SIZE }]}>
-            <Text style={styles.statValue}>{USER_PROFILE.attendanceRate}</Text>
-            <Text style={styles.statLabel}>Attendance</Text>
+        {/* ── ROLE-SPECIFIC STATS BENTO ── */}
+        {role === 'admin' ? (
+          <View style={styles.bentoRow}>
+            <View style={[styles.bentoSquare, { width: SQUARE_SIZE, height: SQUARE_SIZE }]}>
+              <Text style={styles.statValueText}>Good</Text>
+              <Text style={styles.statLabel}>System Health</Text>
+            </View>
+            <View style={[styles.bentoSquare, { width: SQUARE_SIZE, height: SQUARE_SIZE }]}>
+              <Text style={styles.statValueText}>Any</Text>
+              <Text style={styles.statLabel}>Access Level</Text>
+            </View>
           </View>
-          <View style={[styles.bentoSquare, { width: SQUARE_SIZE, height: SQUARE_SIZE }]}>
-            <Text style={styles.statValue}>{USER_PROFILE.streak}</Text>
-            <Text style={styles.statLabel}>Day Streak</Text>
+        ) : (
+          <View style={styles.bentoRow}>
+            <View style={[styles.bentoSquare, { width: SQUARE_SIZE, height: SQUARE_SIZE }]}>
+              <Text style={styles.statValue}>{USER_PROFILE.attendanceRate}</Text>
+              <Text style={styles.statLabel}>Attendance</Text>
+            </View>
+            <View style={[styles.bentoSquare, { width: SQUARE_SIZE, height: SQUARE_SIZE }]}>
+              <Text style={styles.statValue}>{USER_PROFILE.streak}</Text>
+              <Text style={styles.statLabel}>Day Streak</Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* ── ACTION CARDS ── */}
         <View style={styles.actionGroup}>
@@ -93,17 +108,9 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
               thumbColor={palette.white}
             />
           </View>
-          <TouchableOpacity
-            style={[styles.actionCard, { height: ACTION_CARD_H }]}
-            onPress={cycleRole}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.actionText}>Simulate Role</Text>
-            <Text style={styles.actionMeta}>{role.toUpperCase()}</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* ── CLEAN LOGOUT BUTTON ── */}
+        {/* ── ENLARGED LOGOUT BUTTON ── */}
         <TouchableOpacity
           style={[styles.logoutButton, { height: LOGOUT_H }]}
           onPress={onLogout}
@@ -132,8 +139,6 @@ const styles = StyleSheet.create({
     fontSize: 42,
     fontFamily: typography.primaryBold,
   },
-
-  // Changed from Solid Maroon to Clean White Surface
   identityCard: {
     backgroundColor: palette.white,
     borderRadius: 24,
@@ -155,11 +160,11 @@ const styles = StyleSheet.create({
   subtleTag: {
     fontFamily: typography.primaryBold,
     fontSize: 10,
-    color: palette.primary, // Maroon Tag
+    color: palette.primary,
     letterSpacing: 1,
   },
   userName: {
-    color: palette.ink, // Dark Ink Text
+    color: palette.ink,
     fontSize: 28,
     fontFamily: typography.primaryBold,
     lineHeight: 34,
@@ -170,8 +175,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
-
-  // Maroon Background with White Text (Matches Dashboard Active Badge)
   roleChip: {
     backgroundColor: palette.primary,
     paddingHorizontal: spacing.lg,
@@ -184,8 +187,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 1,
   },
-
-  // Soft Background with Border (Matches Class List Pills)
   statusChip: {
     backgroundColor: palette.bg,
     borderWidth: 1,
@@ -218,8 +219,14 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
   },
   statValue: {
-    color: palette.ink, // Reverted to Ink for uniformity
+    color: palette.ink,
     fontSize: 40,
+    fontFamily: typography.primaryBold,
+    marginBottom: spacing.xs,
+  },
+  statValueText: {
+    color: palette.ink,
+    fontSize: 32, // Slightly smaller to fit text strings comfortably
     fontFamily: typography.primaryBold,
     marginBottom: spacing.xs,
   },
@@ -251,30 +258,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: typography.primaryBold,
   },
-  actionMeta: {
-    color: palette.primary,
-    fontSize: 13,
-    fontFamily: typography.primaryBold,
-    letterSpacing: 1,
-  },
-
-  // Changed from Solid Gold to Clean White with Maroon Text
   logoutButton: {
     backgroundColor: palette.white,
-    borderWidth: 1,
+    borderWidth: 1.5, // Thicker border for more emphasis
     borderColor: palette.border,
     borderRadius: 100,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 2,
+    elevation: 4, // Stronger shadow
     shadowColor: palette.ink,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
   },
   logoutButtonText: {
-    color: palette.primary, // Maroon Text for exit action
+    color: palette.primary,
     fontFamily: typography.primaryBold,
-    fontSize: 18,
+    fontSize: 20, // Larger, more legible font
+    letterSpacing: 0.5,
   },
 });

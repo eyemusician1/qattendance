@@ -7,21 +7,25 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { HomeScreen }    from '../screens/HomeScreen';
 import { ClassScreen }   from '../screens/ClassScreen';
+import { AdminApplicationsScreen } from '../screens/AdminApplicationsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { LoginScreen }   from '../screens/LoginScreen';
 import { palette, typography } from '../tokens';
+import { useRole } from '../context/RoleContext';
+import { useAuth } from '../context/AuthContext';
+import { ClassDetailScreen } from '../screens/ClassDetailsScreen';
 
 const Tab = createBottomTabNavigator();
 const RootStack = createNativeStackNavigator();
 
 type AppNavigatorProps = {
-  isAuthenticated: boolean;
-  onLogin: () => void;
-  onLogout: () => void;
+  // no props for now; auth is sourced from AuthContext
 };
 
-function MainTabs({ onLogout }: { onLogout: () => void }) {
+function MainTabs() {
   const insets = useSafeAreaInsets();
+  const { role } = useRole();
+  const { signOut } = useAuth();
 
   // On Android the gesture nav bar sits below the tab bar.
   // We pad the tab bar by the bottom inset so it always reaches the screen edge.
@@ -63,6 +67,8 @@ function MainTabs({ onLogout }: { onLogout: () => void }) {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Classes') {
             iconName = focused ? 'school' : 'school-outline';
+          } else if (route.name === 'Applications') {
+            iconName = focused ? 'document-text' : 'document-text-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
@@ -71,25 +77,39 @@ function MainTabs({ onLogout }: { onLogout: () => void }) {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Classes" component={ClassScreen} />
+      {role === 'admin' ? (
+        <Tab.Screen name="Applications" component={AdminApplicationsScreen} />
+      ) : (
+        <Tab.Screen name="Classes" component={ClassScreen} />
+      )}
       <Tab.Screen name="Profile">
-        {props => <ProfileScreen {...props} onLogout={onLogout} />}
+        {props => <ProfileScreen {...props} onLogout={signOut} />}
       </Tab.Screen>
     </Tab.Navigator>
   );
 }
 
-export function AppNavigator({ isAuthenticated, onLogin, onLogout }: AppNavigatorProps) {
+export function AppNavigator({}: AppNavigatorProps) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return null;
+  }
+
+  const isAuthenticated = !!user;
+
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       {isAuthenticated ? (
-        <RootStack.Screen name="AppTabs">
-          {() => <MainTabs onLogout={onLogout} />}
-        </RootStack.Screen>
+        <RootStack.Group>
+          <RootStack.Screen name="AppTabs">
+            {() => <MainTabs />}
+          </RootStack.Screen>
+
+          <RootStack.Screen name="ClassDetail" component={ClassDetailScreen} />
+        </RootStack.Group>
       ) : (
-        <RootStack.Screen name="Login">
-          {props => <LoginScreen {...props} onLogin={onLogin} />}
-        </RootStack.Screen>
+        <RootStack.Screen name="Login" component={LoginScreen} />
       )}
     </RootStack.Navigator>
   );

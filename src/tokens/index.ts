@@ -10,6 +10,7 @@ export const palette = {
   surface: '#FFFFFF',       // Pure white
   border: '#E8DEDF',        // Maroon-tinted grey for borders
   ink: '#2A0910',           // Almost-black maroon for text
+  body: '#5A4046',          // Medium-emphasis body text
   muted: '#8C7276',         // Faded maroon for secondary text
   white: '#FFFFFF',
 };

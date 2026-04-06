@@ -1,0 +1,114 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function validFullName(name) {
+      return name is string && name.size() >= 2 && name.size() <= 80;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function roleFromProfile() {
+      return isSignedIn() && userDoc().exists() ? userDoc().data.role : null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        roleFromProfile() == 'admin'
+      );
+    }
+
+    function isTeacherOrAdmin() {
+      return isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.teacher == true ||
+        roleFromProfile() == 'teacher'
+      );
+    }
+
+    // Default deny-all. Open only explicit collections below.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User profiles
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      // First login bootstrap: user creates own profile as student only.
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.email is string
+        && validFullName(request.resource.data.fullName)
+        && request.resource.data.role == 'student'
+        && request.resource.data.status == 'active';
+
+      // Users can only update profile fields (not role/approval/security fields).
+      allow update: if isOwner(uid)
+        && validFullName(request.resource.data.fullName)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && !request.resource.data.diff(resource.data).changedKeys().hasAny([
+          'role',
+          'status',
+          'approvedBy',
+          'approvedAt',
+          'isAdmin'
+        ]);
+
+      // Admin can manage roles/status.
+      allow update, delete: if isAdmin();
+    }
+
+    // Role applications (teacher/admin requests)
+    match /roleApplications/{appId} {
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.requestedRole in ['teacher', 'admin']
+        && request.resource.data.status == 'pending';
+
+      allow read: if isAdmin() || (
+        isSignedIn() && resource.data.ownerUid == request.auth.uid
+      );
+
+      // Only admin approves/rejects.
+      allow update, delete: if isAdmin();
+    }
+
+    // Classes and attendance domain (starter policy)
+    match /classes/{classId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isTeacherOrAdmin();
+
+      match /enrollments/{enrollId} {
+        allow read: if isTeacherOrAdmin()
+          || (isSignedIn() && request.auth.uid == enrollId);
+        allow create, update, delete: if isTeacherOrAdmin();
+      }
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isTeacherOrAdmin();
+
+      match /checkIns/{uid} {
+        // Student can create/update own check-in; teacher/admin can read/manage.
+        allow read: if isTeacherOrAdmin() || isOwner(uid);
+        allow create, update: if isOwner(uid) || isTeacherOrAdmin();
+        allow delete: if isTeacherOrAdmin();
+      }
+    }
+  }
+}

@@ -8,16 +8,28 @@ import {
   StatusBar,
   ImageBackground,
   Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { palette, spacing, typography } from '../tokens'; // Added palette import
+import { useAuth } from '../context/AuthContext';
 
-type LoginScreenProps = {
-  onLogin?: () => void;
-};
-
-export function LoginScreen({ onLogin }: LoginScreenProps) {
+export function LoginScreen() {
   const insets = useSafeAreaInsets();
+  const { signInWithGoogle } = useAuth();
+  const [isSigningIn, setIsSigningIn] = React.useState(false);
+
+  const onPressSignIn = async () => {
+    try {
+      setIsSigningIn(true);
+      await signInWithGoogle();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Google sign-in failed.';
+      Alert.alert('Sign-in error', msg);
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
 
   return (
     <ImageBackground
@@ -54,10 +66,11 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
           <TouchableOpacity
             style={styles.ctaButton}
-            onPress={onLogin}
+            onPress={onPressSignIn}
+            disabled={isSigningIn}
             activeOpacity={0.85}
           >
-            <Text style={styles.ctaButtonText}>Get Started</Text>
+            <Text style={styles.ctaButtonText}>{isSigningIn ? 'Signing in...' : 'Get Started'}</Text>
           </TouchableOpacity>
         </View>
       </View>

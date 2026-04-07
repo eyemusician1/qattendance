@@ -4,7 +4,6 @@ import {
   StyleSheet,
   Text,
   View,
-  Platform,
   TouchableOpacity,
   ScrollView,
   Modal,
@@ -22,6 +21,7 @@ import { palette, spacing, typography } from '../tokens';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import firestore from '@react-native-firebase/firestore';
+import { styles } from './styles/ClassScreen.styles';
 
 type TeacherClass = {
   id: string;
@@ -71,6 +71,28 @@ export function ClassScreen() {
     message: '',
     type: 'warning',
   });
+
+  // ── SUBTLE TOAST STATE ──
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastAnim = React.useRef(new Animated.Value(0)).current;
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    toastAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(toastAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2500),
+      Animated.timing(toastAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      })
+    ]).start(() => setToastMessage(null));
+  };
 
   // Teacher Create Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -238,7 +260,6 @@ export function ClassScreen() {
       const classDoc = classQuery.docs[0];
       const classData = classDoc.data();
 
-      // Ensure not already enrolled
       const enrollQuery = await firestore()
         .collection('enrollments')
         .where('studentUid', '==', user.uid)
@@ -273,7 +294,7 @@ export function ClassScreen() {
 
       setShowJoinModal(false);
       setJoinClassCode('');
-      setAlertModal({ visible: true, title: 'Request Sent', message: `Your request to join ${classData.name} has been sent to the instructor for approval.`, type: 'success' });
+      showToast(`Request sent to join ${classData.code}`);
 
     } catch (error) {
       console.error('Failed to join class:', error);
@@ -364,11 +385,10 @@ export function ClassScreen() {
       confirmText: 'Delete',
       onConfirm: async () => {
         closeAlert();
-        if (deletingClassId || !user) return; // Prevent double clicks and enforce user context
+        if (deletingClassId || !user) return;
         setDeletingClassId(cls.id);
 
         try {
-          // ── THE FIX: Added .where('teacherUid', '==', user.uid) to explicitly prove ownership to Firestore rules
           const [meetingSnap, enrollmentSnap] = await Promise.all([
             firestore().collection('meetings')
               .where('classId', '==', cls.id)
@@ -386,6 +406,7 @@ export function ClassScreen() {
           batch.delete(firestore().collection('classes').doc(cls.id));
 
           await batch.commit();
+          showToast(`${cls.code} was deleted successfully`);
         } catch (error) {
           console.error('Failed to delete class:', error);
           setAlertModal({ visible: true, title: 'Error', message: 'Could not complete the deletion. Please check your permissions.', type: 'error' });
@@ -488,7 +509,7 @@ export function ClassScreen() {
                     }}
                   >
                     {deletingClassId === cls.id ? (
-                      <ActivityIndicator size="small" color="#DC2626" />
+                      <ActivityIndicator size="small" color={palette.ink} />
                     ) : (
                       <Text style={styles.deleteClassText}>Delete</Text>
                     )}
@@ -525,7 +546,7 @@ export function ClassScreen() {
       {/* ── EXPANDABLE FLOATING ACTION BUTTON (TEACHER) ── */}
       {role === 'teacher' && (
         <Animated.View
-          style={[styles.fabContainer, { bottom: insets.bottom + 80, opacity: fadeAnim }]}
+          style={[styles.fabContainer, { bottom: insets.bottom + 110, opacity: fadeAnim }]}
           pointerEvents={isAtTop || isFabOpen ? 'box-none' : 'none'}
         >
 
@@ -594,6 +615,29 @@ export function ClassScreen() {
           <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={() => setShowJoinModal(true)}>
             <Ionicons name="add" size={40} color={palette.white} />
           </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* ── SUBTLE TOAST NOTIFICATION ── */}
+      {toastMessage && (
+        <Animated.View
+          style={[
+            styles.toastContainer,
+            {
+              bottom: insets.bottom + 24,
+              opacity: toastAnim,
+              transform: [{
+                translateY: toastAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                })
+              }]
+            }
+          ]}
+          pointerEvents="none"
+        >
+          <Ionicons name="trash-bin-outline" size={16} color={palette.white} />
+          <Text style={styles.toastText}>{toastMessage}</Text>
         </Animated.View>
       )}
 
@@ -779,120 +823,3 @@ export function ClassScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: palette.bg },
-  header: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.md, backgroundColor: palette.bg },
-  pageTitle: { color: palette.ink, fontSize: 42, fontFamily: typography.primaryBold },
-  list: { flex: 1 },
-  listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xxxl * 2, gap: spacing.lg },
-  classCard: { backgroundColor: palette.white, borderRadius: 24, padding: spacing.xl, borderWidth: 1, borderColor: palette.border, gap: spacing.md, elevation: 2, shadowColor: palette.ink, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12 },
-  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  classCode: { color: palette.primary, fontSize: 12, fontFamily: typography.primaryBold, textTransform: 'uppercase', letterSpacing: 1.2 },
-  navIcon: { opacity: 0.6, transform: [{ rotate: '-45deg' }] },
-  cardBody: { gap: spacing.xs },
-  className: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold },
-  classSchedule: { color: palette.muted, fontSize: 15, fontFamily: typography.primaryRegular },
-  classCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  snapshotPill: { alignSelf: 'flex-start', backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 100 },
-  snapshotText: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
-  snapshotPillWarning: { alignSelf: 'flex-start', backgroundColor: palette.secondarySoft, borderColor: palette.secondary, borderWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 100 },
-  snapshotTextWarning: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
-  deleteClassBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: 1, borderColor: '#FECACA', backgroundColor: '#FEF2F2', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 100 },
-  deleteClassBtnDisabled: { opacity: 0.7 },
-  deleteClassText: { color: '#DC2626', fontSize: 12, fontFamily: typography.primaryBold, letterSpacing: 0.4 },
-  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxxl, gap: spacing.md },
-  emptyStateText: { color: palette.muted, fontFamily: typography.primaryRegular, textAlign: 'center', fontSize: 14 },
-
-  // ── EXPANDABLE FLOATING ACTION BUTTON SYSTEM ──
-  fabOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    zIndex: 10,
-  },
-  fabContainer: {
-    position: 'absolute',
-    right: spacing.xl,
-    alignItems: 'flex-end',
-    gap: spacing.md,
-    zIndex: 20,
-  },
-  fabMenu: {
-    alignItems: 'flex-end',
-    gap: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  fabMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: palette.white,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.xl,
-    borderRadius: 100,
-    gap: spacing.md,
-    elevation: 6,
-    shadowColor: palette.ink,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-  },
-  fabMenuItemText: {
-    color: palette.ink,
-    fontSize: 15,
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.3,
-  },
-  fab: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    backgroundColor: palette.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8
-  },
-
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
-  modalCard: { width: '100%', backgroundColor: palette.white, borderRadius: 16, padding: spacing.xxl, elevation: 24, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.2, shadowRadius: 24 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  modalTitle: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold },
-  modalSubtitle: { color: palette.muted, fontSize: 14, fontFamily: typography.primaryRegular, lineHeight: 20, marginBottom: spacing.xl },
-  input: { backgroundColor: palette.white, borderWidth: 1, borderColor: palette.border, borderRadius: 8, paddingHorizontal: spacing.lg, paddingVertical: 14, fontSize: 16, fontFamily: typography.primaryRegular, color: palette.ink, marginBottom: spacing.lg },
-  timeRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs, marginBottom: spacing.sm },
-  timeInputBlock: { flex: 1 },
-  timeHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  timeHeaderLabel: { color: palette.ink, fontSize: 13, fontFamily: typography.primaryBold, textTransform: 'uppercase', letterSpacing: 0.6 },
-  periodSwitch: { flexDirection: 'row', backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border, borderRadius: 100, padding: 2 },
-  periodBtn: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: 100 },
-  periodBtnActive: { backgroundColor: palette.primary },
-  periodText: { color: palette.muted, fontSize: 11, fontFamily: typography.primaryBold, letterSpacing: 0.4 },
-  periodTextActive: { color: palette.white },
-  timeInput: { marginBottom: 0, textAlign: 'left', textAlignVertical: 'center', color: palette.ink, fontFamily: Platform.OS === 'android' ? 'sans-serif' : 'System', fontSize: 16, backgroundColor: palette.surface, borderColor: 'rgba(31, 31, 31, 0.24)', borderWidth: 1.2, minHeight: 45, paddingVertical: 10 },
-  timeHintText: { color: palette.muted, fontSize: 12, fontFamily: typography.primaryRegular, lineHeight: 16, marginTop: 4, marginBottom: spacing.lg },
-  codeCallout: { backgroundColor: palette.bg, padding: spacing.lg, borderRadius: 8, marginBottom: spacing.xxl },
-  codeCalloutText: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryRegular },
-  codeHighlight: { color: palette.ink, fontFamily: typography.primaryBold },
-  modalFooter: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
-  cancelBtn: { height: 40, justifyContent: 'center', paddingHorizontal: spacing.sm },
-  cancelBtnText: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
-  createBtn: { backgroundColor: palette.primary, height: 40, paddingHorizontal: spacing.xl, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  createBtnText: { color: palette.white, fontSize: 13, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
-
-  // ── STRICT BRANDED ALERT MODAL STYLES ──
-  alertBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  alertCard: { width: '100%', backgroundColor: palette.white, borderRadius: 28, padding: spacing.xxl, alignItems: 'center', elevation: 24, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.15, shadowRadius: 24 },
-  alertIconWrap: { width: 64, height: 64, borderRadius: 32, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
-  alertTitle: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold, textAlign: 'center', marginBottom: spacing.xs },
-  alertMessage: { color: palette.muted, fontSize: 15, fontFamily: typography.primaryRegular, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xxl },
-  alertGotItBtn: { width: '100%', paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  alertGotItText: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
-  alertActionRow: { flexDirection: 'row', width: '100%', gap: spacing.md },
-  alertCancelBtn: { flex: 1, backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border, paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  alertCancelText: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
-  alertConfirmBtn: { flex: 1, paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  alertConfirmText: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
-});

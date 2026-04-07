@@ -1,9 +1,8 @@
 // src/screens/RollCallScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
@@ -16,6 +15,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { palette, spacing, typography } from '../tokens';
 import firestore from '@react-native-firebase/firestore';
+import { dlg, styles } from './styles/RollCallScreen.styles';
 
 // ─────────────────────────────────────────────
 // Types
@@ -164,15 +164,24 @@ export function RollCallScreen() {
   }, [meetingId]);
 
   // ── Filtered student list ──
-  const visibleStudents = skipPresent
-    ? students.filter(s => s.status !== 'present')
-    : students;
+  const visibleStudents = useMemo(
+    () => (skipPresent ? students.filter(s => s.status !== 'present') : students),
+    [skipPresent, students]
+  );
 
-  // ── Metrics ──
-  const presentCount  = students.filter(s => s.status === 'present').length;
-  const absentCount   = students.filter(s => s.status === 'absent').length;
-  const lateCount     = students.filter(s => s.status === 'late').length;
-  const unmarkedCount = students.filter(s => s.status === 'unmarked').length;
+  // Single-pass counters to avoid repeated full-array scans.
+  const metrics = useMemo(() => {
+    return students.reduce(
+      (acc, student) => {
+        if (student.status === 'present') acc.present += 1;
+        if (student.status === 'absent') acc.absent += 1;
+        if (student.status === 'late') acc.late += 1;
+        if (student.status === 'unmarked') acc.unmarked += 1;
+        return acc;
+      },
+      { present: 0, absent: 0, late: 0, unmarked: 0 }
+    );
+  }, [students]);
 
   // ── Dialog actions ──
   const handleConfirm = async () => {
@@ -236,15 +245,15 @@ export function RollCallScreen() {
 
           <View style={styles.metricsRow}>
             <View style={styles.metricBlock}>
-              <Text style={styles.metricValue}>{presentCount}</Text>
+              <Text style={styles.metricValue}>{metrics.present}</Text>
               <Text style={styles.metricLabel}>PRESENT</Text>
             </View>
             <View style={styles.metricBlock}>
-              <Text style={styles.metricValue}>{absentCount}</Text>
+              <Text style={styles.metricValue}>{metrics.absent}</Text>
               <Text style={styles.metricLabel}>ABSENT</Text>
             </View>
             <View style={styles.metricBlock}>
-              <Text style={styles.metricValue}>{lateCount}</Text>
+              <Text style={styles.metricValue}>{metrics.late}</Text>
               <Text style={styles.metricLabel}>LATE</Text>
             </View>
             <View style={styles.metricBlockLast}>
@@ -434,324 +443,3 @@ function ConfirmDialog({ visible, type, isProcessing, onConfirm, onCancel }: Con
 // StyleSheet
 // ─────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: palette.bg },
-
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    backgroundColor: palette.bg,
-  },
-  headerTitle: {
-    color: palette.ink,
-    fontSize: 18,
-    fontFamily: typography.primaryBold,
-  },
-
-  scrollContent: { paddingBottom: spacing.xxxl },
-
-  // Banner
-  classCardWrapper: {
-    backgroundColor: palette.primary,
-    marginHorizontal: spacing.xl,
-    borderRadius: 24,
-    padding: spacing.xl,
-    elevation: 6,
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    marginBottom: spacing.lg,
-  },
-  classCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  classCardTitle: {
-    color: palette.white,
-    fontSize: 24,
-    fontFamily: typography.primaryBold,
-    marginBottom: 4,
-    flex: 1,
-  },
-  classCardSubtitle: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-    fontFamily: typography.primaryMedium,
-  },
-  statusBadgeTop: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 100,
-  },
-  statusBadgeTopText: {
-    fontSize: 10,
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.5,
-  },
-  bannerStatusOpen: { backgroundColor: 'rgba(255,255,255,0.2)' },
-  bannerTextOpen: { color: palette.white },
-  bannerStatusClosed: { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
-  bannerTextClosed: { color: 'rgba(255,255,255,0.7)' },
-
-  metricsDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginVertical: spacing.lg,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  metricBlock: { alignItems: 'center' },
-  metricValue: { color: palette.white, fontSize: 20, fontFamily: typography.primaryBold },
-  metricLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 10,
-    fontFamily: typography.primaryBold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 2,
-  },
-  metricBlockLast: { alignItems: 'flex-end', justifyContent: 'center' },
-
-  cancelBtnOutline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: palette.white,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 100,
-    gap: 4,
-  },
-  cancelBtnOutlineText: {
-    color: palette.ink,
-    fontSize: 11,
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.5,
-  },
-
-  // Roster
-  listContainer: { flex: 1, paddingHorizontal: spacing.xl },
-  listHeader: {
-    color: palette.ink,
-    fontSize: 18,
-    fontFamily: typography.primaryBold,
-    marginBottom: spacing.md,
-    marginTop: spacing.md,
-  },
-  emptyState: { paddingVertical: spacing.xxxl, alignItems: 'center', gap: spacing.md },
-  emptyStateText: {
-    color: palette.muted,
-    fontSize: 15,
-    fontFamily: typography.primaryRegular,
-    textAlign: 'center',
-  },
-
-  tableContainer: { flex: 1, backgroundColor: palette.white, marginHorizontal: spacing.xl, marginBottom: spacing.md, borderWidth: 1, borderColor: palette.border, borderRadius: 16, overflow: 'hidden' },
-  tableTitle: { color: palette.muted, fontSize: 16, fontFamily: typography.primaryBold, padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: palette.border },
-  tableHeader: { flexDirection: 'row', padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: palette.border, backgroundColor: palette.bg },
-  tableHeaderText: { color: palette.ink, fontSize: 11, fontFamily: typography.primaryBold },
-  tableBody: { flex: 1 },
-  tableRow: { flexDirection: 'row', padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: palette.border },
-  rowText: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryMedium },
-  rowTextBold: { color: palette.ink, fontFamily: typography.primaryBold },
-  emptyRow: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyText: { color: palette.ink, fontSize: 14, fontFamily: typography.primaryMedium },
-
-  // Student card
-  studentCard: {
-    backgroundColor: palette.white,
-    borderRadius: 16,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: palette.border,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: palette.ink,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-  },
-  studentInfo: { flex: 1, paddingRight: spacing.md },
-  studentName: {
-    color: palette.ink,
-    fontSize: 16,
-    fontFamily: typography.primaryBold,
-    marginBottom: 4,
-  },
-  studentTime: {
-    color: palette.muted,
-    fontSize: 13,
-    fontFamily: typography.primaryMedium,
-  },
-
-  // Status badge (base)
-  statusBadge:     { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
-  statusBadgeText: { fontSize: 11, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
-
-  // Footer
-  footer: {
-    backgroundColor: palette.white,
-    borderTopWidth: 1,
-    borderTopColor: palette.border,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-  },
-  footerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  footerToggleLabel: {
-    color: palette.ink,
-    fontSize: 15,
-    fontFamily: typography.primaryMedium,
-  },
-  footerButtons: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  actionGroup: { flexDirection: 'row', gap: spacing.sm },
-  actionBtn: { flex: 1, paddingVertical: 14, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
-  actionBtnText: { color: palette.white, fontSize: 13, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
-  cancelBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.bg,
-    paddingVertical: 14,
-    borderRadius: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelBtnText: {
-    color: palette.ink,
-    fontSize: 13,
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.5,
-  },
-  saveBtn: {
-    flex: 1,
-    backgroundColor: palette.ink,
-    paddingVertical: 14,
-    borderRadius: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveBtnText: {
-    color: palette.white,
-    fontSize: 13,
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.5,
-  },
-  submitBtn: {
-    flex: 1.5,
-    backgroundColor: palette.primary,
-    paddingVertical: 14,
-    borderRadius: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitBtnText: {
-    color: palette.white,
-    fontSize: 13,
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.5,
-  },
-});
-
-// Dialog-specific styles
-const dlg = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: palette.white,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: spacing.xxl,
-    paddingTop: spacing.xxl,
-    paddingBottom: spacing.xxxl,
-    alignItems: 'center',
-    elevation: 24,
-    shadowColor: palette.ink,
-    shadowOffset: { width: 0, height: -12 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-  },
-  iconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.lg,
-  },
-  textGroup: {
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    marginBottom: spacing.xxl,
-  },
-  title: {
-    color: palette.ink,
-    fontSize: 22,
-    fontFamily: typography.primaryBold,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  body: {
-    color: palette.muted,
-    fontSize: 15,
-    fontFamily: typography.primaryRegular,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    width: '100%',
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.bg,
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
-  cancelText: {
-    color: palette.ink,
-    fontSize: 15,
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.5,
-  },
-  confirmBtn: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmDisabled: {
-    opacity: 0.6,
-  },
-  confirmText: {
-    color: palette.white,
-    fontSize: 15,
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.5,
-  },
-});

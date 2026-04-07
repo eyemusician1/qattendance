@@ -1,5 +1,5 @@
 // src/screens/HomeScreen.tsx
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   Alert,
   Modal,
@@ -9,15 +9,20 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   ScrollView,
+  Animated,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { BottomTabNavigationProp, useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { palette, spacing, typography } from '../tokens';
 import { useRole } from '../context/RoleContext';
 import firestore from '@react-native-firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 type TeacherClassItem = {
   id: string;
@@ -31,6 +36,7 @@ export function HomeScreen() {
   const { role } = useRole();
   const { user, fullName } = useAuth();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<BottomTabNavigationProp<any>>();
 
   const [isApplying, setIsApplying] = useState(false);
@@ -44,17 +50,20 @@ export function HomeScreen() {
   const [criticalStudentsCount, setCriticalStudentsCount] = useState(0);
   const [pendingReviewsCount, setPendingReviewsCount] = useState(0);
 
-  // Custom Roll Call Modal State
+  // ── SWIPEABLE ROLL CALL SHEET STATE ──
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassItem[]>([]);
   const [activeMeetings, setActiveMeetings] = useState<Record<string, any>>({});
   const [showRollCallModal, setShowRollCallModal] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
+  const panY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const [sheetState, setSheetState] = useState<'closed'|'half'|'full'>('closed');
+
   useEffect(() => {
     if (role !== 'admin') return;
     const unsubscribe = firestore().collection('roleApplications').where('status', '==', 'pending').onSnapshot(
       snapshot => setAdminPendingCount(snapshot.size),
-      error => console.error('Failed to get pending application count:', error)
+      error => console.warn('Failed to get pending application count:', error)
     );
     return () => unsubscribe();
   }, [role]);
@@ -96,7 +105,7 @@ export function HomeScreen() {
       .where('status', '==', 'pending')
       .onSnapshot(
         snapshot => setPendingReviewsCount(snapshot.size),
-        error => console.error('Failed to fetch pending reviews:', error)
+        error => console.warn('Failed to fetch pending reviews:', error)
       );
 
     const unsubscribeCritical = firestore()
@@ -105,7 +114,7 @@ export function HomeScreen() {
       .where('isCritical', '==', true)
       .onSnapshot(
         snapshot => setCriticalStudentsCount(snapshot.size),
-        error => console.error('Failed to fetch critical students:', error)
+        error => console.warn('Failed to fetch critical students:', error)
       );
 
     const unsubscribeMeetings = firestore()
@@ -121,7 +130,7 @@ export function HomeScreen() {
           });
           setActiveMeetings(mMap);
         },
-        error => console.error('Failed to fetch active meetings:', error)
+        error => console.warn('Failed to fetch active meetings:', error)
       );
 
     return () => {
@@ -189,11 +198,52 @@ export function HomeScreen() {
 
   const showNotifDot = (role === 'student' && !hasPendingTeacherApplication) || (role === 'teacher' && pendingReviewsCount > 0);
 
-  // ── NEW ROLL CALL MODAL LOGIC ──
+  // ── SWIPEABLE SHEET GESTURE LOGIC ──
   const openRollCallModal = () => {
-    setSelectedClassId(null);
+    panY.setValue(SCREEN_HEIGHT);
     setShowRollCallModal(true);
+    setSheetState('full');
+    setSelectedClassId(null);
+    Animated.spring(panY, {
+      toValue: insets.top + spacing.lg,
+      useNativeDriver: true,
+      bounciness: 4,
+    }).start();
   };
+
+  const closeRollCallModal = () => {
+    Animated.timing(panY, {
+      toValue: SCREEN_HEIGHT,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowRollCallModal(false);
+      setSheetState('closed');
+    });
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 10,
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy < -50) {
+          // Swiped Up
+          setSheetState('full');
+          Animated.spring(panY, { toValue: insets.top + spacing.lg, useNativeDriver: true, bounciness: 4 }).start();
+        } else if (gesture.dy > 50) {
+          // Swiped Down
+          closeRollCallModal();
+        } else {
+          // Snap back
+          Animated.spring(panY, {
+            toValue: insets.top + spacing.lg,
+            useNativeDriver: true,
+            bounciness: 4,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   const handleContinueRollCall = () => {
     if (!selectedClassId) return;
@@ -201,26 +251,28 @@ export function HomeScreen() {
     if (!cls) return;
 
     const isLive = !!activeMeetings[cls.id];
-    setShowRollCallModal(false);
+    closeRollCallModal();
 
-    if (isLive) {
-      const meeting = activeMeetings[cls.id];
-      navigation.navigate('RollCall', {
-        meetingId: meeting.id,
-        classId: meeting.classId,
-        className: meeting.className,
-        section: meeting.section,
-        date: meeting.date,
-        time: meeting.time,
-      });
-    } else {
-      navigation.navigate('ClassDetail', {
-        classId: cls.id,
-        name: cls.name,
-        section: cls.section,
-        code: cls.code
-      });
-    }
+    setTimeout(() => {
+      if (isLive) {
+        const meeting = activeMeetings[cls.id];
+        navigation.navigate('RollCall', {
+          meetingId: meeting.id,
+          classId: meeting.classId,
+          className: meeting.className,
+          section: meeting.section,
+          date: meeting.date,
+          time: meeting.time,
+        });
+      } else {
+        navigation.navigate('ClassDetail', {
+          classId: cls.id,
+          name: cls.name,
+          section: cls.section,
+          code: cls.code
+        });
+      }
+    }, 250);
   };
 
   return (
@@ -367,57 +419,104 @@ export function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* ── NOTIFICATION MODAL ── */}
+      {/* ── REDESIGNED NOTIFICATION MODAL ── */}
       <Modal visible={showNotifPanel} transparent animationType="fade" onRequestClose={() => setShowNotifPanel(false)}>
         <TouchableWithoutFeedback onPress={() => setShowNotifPanel(false)}>
-          <View style={styles.modalBackdrop}>
+          <View style={styles.notifModalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={[styles.notifPanel, { top: Math.max(insets.top, spacing.xl) + 52 }]}>
-                <View style={styles.notifPanelHeader}>
-                  <Text style={styles.notifPanelTitle}>Notifications</Text>
-                  <TouchableOpacity onPress={() => setShowNotifPanel(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="close-outline" size={22} color={palette.muted} />
+              <View style={styles.notifCard}>
+
+                <View style={styles.notifHeader}>
+                  <Text style={styles.notifTitle}>Notifications</Text>
+                  <TouchableOpacity onPress={() => setShowNotifPanel(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                    <Ionicons name="close-outline" size={24} color={palette.ink} />
                   </TouchableOpacity>
                 </View>
+
                 {role === 'student' && (
-                  <View style={styles.notifItem}>
-                    <View style={styles.notifIconWrap}><Ionicons name="school" size={28} color={palette.primary} /></View>
-                    <View style={styles.notifItemBody}>
-                      <Text style={styles.notifItemTitle}>Become an Instructor</Text>
-                      <Text style={styles.notifItemSub}>{hasPendingTeacherApplication ? 'Your application is pending admin review.' : 'Unlock teaching tools by applying for an instructor role upgrade.'}</Text>
+                  <View style={styles.notifBody}>
+                    <View style={styles.notifIconWrap}>
+                      <Ionicons name="school" size={32} color={palette.primary} />
                     </View>
-                    {!hasPendingTeacherApplication && (
-                      <TouchableOpacity style={[styles.notifActionLarge, isApplying && styles.notifActionDisabled]} activeOpacity={0.85} disabled={isApplying} onPress={applyAsTeacher}>
-                        <Text style={styles.notifActionTextLarge}>{isApplying ? 'Submitting...' : 'Apply Now'}</Text>
+                    <Text style={styles.notifItemTitle}>Become an Instructor</Text>
+                    <Text style={styles.notifItemSub}>
+                      {hasPendingTeacherApplication
+                        ? 'Your application is pending admin review. Please wait for approval.'
+                        : 'Unlock teaching tools by applying for an instructor role upgrade.'}
+                    </Text>
+
+                    {!hasPendingTeacherApplication ? (
+                      <TouchableOpacity
+                        style={[styles.notifActionBtn, isApplying && styles.notifActionBtnDisabled]}
+                        activeOpacity={0.85}
+                        disabled={isApplying}
+                        onPress={applyAsTeacher}
+                      >
+                        <Text style={styles.notifActionText}>{isApplying ? 'Submitting...' : 'Apply Now'}</Text>
                       </TouchableOpacity>
+                    ) : (
+                      <View style={styles.notifStatusPill}>
+                        <Text style={styles.notifStatusText}>PENDING APPROVAL</Text>
+                      </View>
                     )}
-                    {hasPendingTeacherApplication && <View style={styles.notifStatusPillLarge}><Text style={styles.notifStatusTextLarge}>PENDING APPROVAL</Text></View>}
                   </View>
                 )}
+
                 {role === 'teacher' && (
-                  <View style={styles.notifItem}>
-                    <View style={styles.notifIconWrap}><Ionicons name="people" size={28} color={palette.primary} /></View>
-                    <View style={styles.notifItemBody}>
-                      <Text style={styles.notifItemTitle}>Enrollment Requests</Text>
-                      <Text style={styles.notifItemSub}>{pendingReviewsCount > 0 ? `You have ${pendingReviewsCount} student${pendingReviewsCount > 1 ? 's' : ''} waiting to join your classes. Review them now.` : 'All your classes are up to date. No pending requests.'}</Text>
+                  <View style={styles.notifBody}>
+                    <View style={styles.notifIconWrap}>
+                      <Ionicons name="people" size={32} color={palette.primary} />
                     </View>
-                    {pendingReviewsCount > 0 && <View style={styles.notifStatusPillLarge}><Text style={styles.notifStatusTextLarge}>ACTION REQUIRED</Text></View>}
+                    <Text style={styles.notifItemTitle}>Enrollment Requests</Text>
+                    <Text style={styles.notifItemSub}>
+                      {pendingReviewsCount > 0
+                        ? `You have ${pendingReviewsCount} student${pendingReviewsCount > 1 ? 's' : ''} waiting to join your classes. Review them now.`
+                        : 'All your classes are up to date. No pending requests.'}
+                    </Text>
+
+                    {pendingReviewsCount > 0 ? (
+                      <TouchableOpacity
+                        style={styles.notifActionBtn}
+                        activeOpacity={0.85}
+                        onPress={() => {
+                          setShowNotifPanel(false);
+                          navigation.navigate('Classes');
+                        }}
+                      >
+                        <Text style={styles.notifActionText}>REVIEW NOW</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.notifStatusPill}>
+                        <Text style={styles.notifStatusText}>ALL CAUGHT UP</Text>
+                      </View>
+                    )}
                   </View>
                 )}
+
               </View>
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* ── EXPANDED ROLL CALL MODAL ── */}
-      <Modal visible={showRollCallModal} transparent animationType="fade" onRequestClose={() => setShowRollCallModal(false)}>
-        <View style={styles.rcModalBackdrop}>
-          <TouchableWithoutFeedback onPress={() => setShowRollCallModal(false)}>
-            <View style={StyleSheet.absoluteFillObject} />
+      {/* ── EXPANDABLE SWIPEABLE BOTTOM SHEET ── */}
+      {showRollCallModal && (
+        <View style={StyleSheet.absoluteFill}>
+          <TouchableWithoutFeedback onPress={closeRollCallModal}>
+            <Animated.View style={[styles.rcModalBackdrop, {
+              opacity: panY.interpolate({
+                inputRange: [0, SCREEN_HEIGHT],
+                outputRange: [1, 0],
+                extrapolate: 'clamp'
+              })
+            }]} />
           </TouchableWithoutFeedback>
 
-          <View style={styles.rcModalCard}>
+          <Animated.View style={[styles.rcBottomSheet, { height: SCREEN_HEIGHT - (insets.top + spacing.lg), transform: [{ translateY: panY }] }]}>
+
+            <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
+              <View style={styles.dragIndicator} />
+            </View>
 
             <View style={styles.rcModalHeaderIconWrap}>
               <Ionicons name="clipboard-outline" size={28} color={palette.primary} />
@@ -428,45 +527,51 @@ export function HomeScreen() {
 
             <Text style={styles.rcListLabel}>CLASS LIST</Text>
 
-            <ScrollView style={styles.rcList} showsVerticalScrollIndicator={false}>
-              {teacherClasses.length === 0 ? (
-                <View style={styles.emptySheet}>
-                  <Text style={styles.emptySheetText}>No classes available.</Text>
-                </View>
-              ) : (
-                teacherClasses.map(cls => {
-                  const isLive = !!activeMeetings[cls.id];
-                  const isSelected = selectedClassId === cls.id;
+            <View style={styles.rcListWrapper}>
+              <ScrollView
+                style={styles.rcList}
+                contentContainerStyle={styles.rcListContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {teacherClasses.length === 0 ? (
+                  <View style={styles.emptySheet}>
+                    <Text style={styles.emptySheetText}>No classes available.</Text>
+                  </View>
+                ) : (
+                  teacherClasses.map(cls => {
+                    const isLive = !!activeMeetings[cls.id];
+                    const isSelected = selectedClassId === cls.id;
 
-                  return (
-                    <TouchableOpacity
-                      key={cls.id}
-                      style={[
-                        styles.rcClassItem,
-                        isSelected && styles.rcClassItemSelected
-                      ]}
-                      activeOpacity={0.7}
-                      onPress={() => setSelectedClassId(cls.id)}
-                    >
-                      <View style={styles.rcClassInfo}>
-                        <Text style={[styles.rcClassName, isSelected && { color: palette.primary }]}>{cls.code} • Section {cls.section}</Text>
-                        <Text style={styles.rcClassSubName}>{cls.name}</Text>
-                      </View>
-
-                      {isLive && (
-                        <View style={styles.liveBadge}>
-                          <View style={styles.liveDot} />
-                          <Text style={styles.liveText}>LIVE</Text>
+                    return (
+                      <TouchableOpacity
+                        key={cls.id}
+                        style={[
+                          styles.rcClassItem,
+                          isSelected && styles.rcClassItemSelected
+                        ]}
+                        activeOpacity={0.7}
+                        onPress={() => setSelectedClassId(cls.id)}
+                      >
+                        <View style={styles.rcClassInfo}>
+                          <Text style={[styles.rcClassName, isSelected && { color: palette.primary }]}>{cls.code} • Section {cls.section}</Text>
+                          <Text style={styles.rcClassSubName}>{cls.name}</Text>
                         </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-            </ScrollView>
 
-            <View style={styles.rcModalFooter}>
-              <TouchableOpacity onPress={() => setShowRollCallModal(false)} style={styles.rcCancelBtn}>
+                        {isLive && (
+                          <View style={styles.liveBadge}>
+                            <View style={styles.liveDot} />
+                            <Text style={styles.liveText}>LIVE</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </ScrollView>
+            </View>
+
+            <View style={[styles.rcModalFooter, { paddingBottom: Math.max(insets.bottom + tabBarHeight + spacing.sm, spacing.xl) }]}>
+              <TouchableOpacity onPress={closeRollCallModal} style={styles.rcCancelBtn}>
                 <Text style={styles.rcCancelText}>CANCEL</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -478,9 +583,9 @@ export function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-          </View>
+          </Animated.View>
         </View>
-      </Modal>
+      )}
 
     </>
   );
@@ -522,33 +627,148 @@ const styles = StyleSheet.create({
   badgeActive: { alignSelf: 'flex-start', backgroundColor: palette.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 100 },
   badgeTextActive: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
 
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.18)' },
-  notifPanel: { position: 'absolute', right: spacing.xl, width: 320, backgroundColor: palette.white, borderRadius: 24, borderWidth: 1, borderColor: palette.border, overflow: 'hidden', elevation: 20, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.15, shadowRadius: 24 },
-  notifPanelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: palette.border },
-  notifPanelTitle: { color: palette.ink, fontSize: 14, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
-  notifItem: { flexDirection: 'column', alignItems: 'center', padding: spacing.xxl, gap: spacing.lg },
-  notifIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: palette.secondarySoft, borderWidth: 1, borderColor: palette.secondary, alignItems: 'center', justifyContent: 'center' },
-  notifItemBody: { alignItems: 'center', gap: spacing.xs },
-  notifItemTitle: { color: palette.ink, fontSize: 18, fontFamily: typography.primaryBold, textAlign: 'center' },
-  notifItemSub: { color: palette.muted, fontSize: 14, fontFamily: typography.primaryRegular, lineHeight: 20, textAlign: 'center' },
-  notifActionLarge: { width: '100%', backgroundColor: palette.primary, borderRadius: 100, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center' },
-  notifActionDisabled: { backgroundColor: palette.muted },
-  notifActionTextLarge: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 14, letterSpacing: 1, textTransform: 'uppercase' },
-  notifStatusPillLarge: { width: '100%', backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border, borderRadius: 100, paddingVertical: spacing.md, alignItems: 'center' },
-  notifStatusTextLarge: { color: palette.muted, fontFamily: typography.primaryBold, fontSize: 12, letterSpacing: 1 },
+  // ── REDESIGNED NOTIFICATION MODAL STYLES ──
+  notifModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)', // Dimmed background
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl
+  },
+  notifCard: {
+    width: '100%',
+    backgroundColor: palette.white,
+    borderRadius: 28,
+    padding: spacing.xxl,
+    elevation: 24,
+    shadowColor: palette.ink,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  notifTitle: {
+    color: palette.ink,
+    fontSize: 18,
+    fontFamily: typography.primaryBold,
+  },
+  notifBody: {
+    alignItems: 'center',
+  },
+  notifIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: palette.bg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  notifItemTitle: {
+    color: palette.ink,
+    fontSize: 20,
+    fontFamily: typography.primaryBold,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  notifItemSub: {
+    color: palette.muted,
+    fontSize: 14,
+    fontFamily: typography.primaryRegular,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: spacing.xxl,
+  },
+  notifActionBtn: {
+    width: '100%',
+    backgroundColor: palette.primary,
+    paddingVertical: 16,
+    borderRadius: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifActionBtnDisabled: {
+    opacity: 0.7,
+  },
+  notifActionText: {
+    color: palette.white,
+    fontFamily: typography.primaryBold,
+    fontSize: 14,
+    letterSpacing: 0.5,
+  },
+  notifStatusPill: {
+    width: '100%',
+    backgroundColor: palette.bg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingVertical: 16,
+    borderRadius: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifStatusText: {
+    color: palette.ink,
+    fontFamily: typography.primaryBold,
+    fontSize: 14,
+    letterSpacing: 0.5,
+  },
 
-  // ── EXPANDED ROLL CALL MODAL STYLES ──
-  rcModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
-  rcModalCard: { width: '100%', maxHeight: '85%', backgroundColor: palette.white, borderRadius: 28, padding: spacing.xxl, alignItems: 'center', elevation: 24, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.15, shadowRadius: 24 },
-  rcModalHeaderIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: palette.secondarySoft, borderWidth: 1, borderColor: palette.secondary, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
-  rcModalTitle: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold, textAlign: 'center', marginBottom: 4 },
-  rcModalSub: { color: palette.muted, fontSize: 14, fontFamily: typography.primaryRegular, textAlign: 'center', marginBottom: spacing.xl },
-  rcListLabel: { alignSelf: 'flex-start', color: palette.ink, fontSize: 12, fontFamily: typography.primaryBold, letterSpacing: 0.5, marginBottom: spacing.sm },
-  rcList: { width: '100%', flexGrow: 0, marginBottom: spacing.lg },
+  // ── SWIPEABLE BOTTOM SHEET STYLES ──
+  rcModalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  rcBottomSheet: {
+    position: 'absolute',
+    left: 0, right: 0, top: 0,
+    height: SCREEN_HEIGHT,
+    backgroundColor: palette.white,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: spacing.xxl,
+    elevation: 24,
+    shadowColor: palette.ink,
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24
+  },
+  dragHandleArea: {
+    width: '100%',
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  dragIndicator: {
+    width: 48,
+    height: 5,
+    backgroundColor: palette.border,
+    borderRadius: 3,
+  },
+  rcModalHeaderIconWrap: { alignSelf: 'center', width: 64, height: 64, borderRadius: 32, backgroundColor: palette.secondarySoft, borderWidth: 1, borderColor: palette.secondary, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
+  rcModalTitle: { alignSelf: 'center', color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold, textAlign: 'center', marginBottom: 4 },
+  rcModalSub: { alignSelf: 'center', color: palette.muted, fontSize: 14, fontFamily: typography.primaryRegular, textAlign: 'center', marginBottom: spacing.xl },
+  rcListLabel: { color: palette.ink, fontSize: 12, fontFamily: typography.primaryBold, letterSpacing: 0.5, marginBottom: spacing.sm },
+
+  rcListWrapper: {
+    flex: 1,
+    width: '100%',
+    marginBottom: spacing.lg,
+  },
+  rcList: {
+    width: '100%',
+  },
+  rcListContent: {
+    paddingBottom: spacing.lg,
+  },
 
   rcClassItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: palette.white, padding: spacing.lg, borderRadius: 16, borderWidth: 1, borderColor: palette.border, marginBottom: spacing.sm },
   rcClassItemSelected: { borderColor: palette.primary, backgroundColor: '#FFF5F5' },
-  rcClassInfo: { flex: 1 },
+  rcClassInfo: { flexShrink: 1, paddingRight: spacing.sm },
   rcClassName: { color: palette.ink, fontSize: 15, fontFamily: typography.primaryBold, marginBottom: 2 },
   rcClassSubName: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryMedium },
 
@@ -558,7 +778,7 @@ const styles = StyleSheet.create({
   emptySheet: { paddingVertical: spacing.xxxl, alignItems: 'center' },
   emptySheetText: { color: palette.muted, fontFamily: typography.primaryMedium, fontSize: 15 },
 
-  rcModalFooter: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.md },
+  rcModalFooter: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center' },
   rcCancelBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   rcCancelText: { color: palette.muted, fontSize: 14, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
   rcContinueBtn: { backgroundColor: palette.primary, paddingVertical: 14, paddingHorizontal: spacing.xxl, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },

@@ -20,8 +20,6 @@ import { palette, spacing, typography } from '../tokens';
 import { useAuth } from '../context/AuthContext';
 import firestore from '@react-native-firebase/firestore';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type Meeting = {
   id: string;
   date: string;
@@ -45,10 +43,8 @@ type AttendanceSummary = {
   present: number;
   absent: number;
   late: number;
-  rate: number; // percentage 0–100
+  rate: number;
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 export function ClassDetailScreen() {
   const insets     = useSafeAreaInsets();
@@ -59,25 +55,19 @@ export function ClassDetailScreen() {
 
   const [activeTab, setActiveTab] = useState<'attendance' | 'students' | 'analysis'>('attendance');
 
-  // Attendance tab
   const [showPastMeetings,  setShowPastMeetings]  = useState(false);
   const [meetings,          setMeetings]          = useState<Meeting[]>([]);
   const [isLoadingMeetings, setIsLoadingMeetings] = useState(true);
 
-  // Students tab
   const [enrolledStudents,    setEnrolledStudents]    = useState<EnrolledStudent[]>([]);
   const [isLoadingStudents,   setIsLoadingStudents]   = useState(true);
   const [processingStudentId, setProcessingStudentId] = useState<string | null>(null);
 
-  // Analysis tab
   const [summaries,         setSummaries]         = useState<AttendanceSummary[]>([]);
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(true);
 
-  // Meeting creation modal
   const [showMeetingModal, setShowMeetingModal] = useState(false);
-  const [meetingDate, setMeetingDate] = useState(
-    () => new Date().toISOString().split('T')[0].replace(/-/g, '/'),
-  );
+  const [meetingDate, setMeetingDate] = useState(() => new Date().toISOString().split('T')[0].replace(/-/g, '/'));
   const [meetingTime, setMeetingTime] = useState(() => {
     const now = new Date();
     return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
@@ -91,13 +81,12 @@ export function ClassDetailScreen() {
   const currentYear = new Date().getFullYear();
   const academicYear = `${currentYear}–${currentYear + 1}`;
 
-  // ── ATTENDANCE: real-time meetings listener ──────────────────────────────
   useEffect(() => {
     if (!classId || !user) return;
     const unsubscribe = firestore()
       .collection('meetings')
       .where('classId', '==', classId)
-      .where('teacherUid', '==', user.uid) // <-- FIX: Added teacherUid filter for rules
+      .where('teacherUid', '==', user.uid)
       .orderBy('createdAt', 'desc')
       .onSnapshot(
         snapshot => {
@@ -122,13 +111,12 @@ export function ClassDetailScreen() {
     return () => unsubscribe();
   }, [classId, user]);
 
-  // ── STUDENTS: real-time enrollments listener ─────────────────────────────
   useEffect(() => {
     if (!classId || !user) return;
     const unsubscribe = firestore()
       .collection('enrollments')
       .where('classId', '==', classId)
-      .where('teacherUid', '==', user.uid) // <-- FIX: Added teacherUid filter for rules
+      .where('teacherUid', '==', user.uid)
       .onSnapshot(
         snapshot => {
           const data = snapshot.docs.map(doc => {
@@ -154,7 +142,6 @@ export function ClassDetailScreen() {
     return () => unsubscribe();
   }, [classId, user]);
 
-  // ── ANALYSIS: aggregate attendance from all closed meetings ──────────────
   useEffect(() => {
     if (!classId || activeTab !== 'analysis' || !user) return;
     setIsLoadingAnalysis(true);
@@ -164,7 +151,7 @@ export function ClassDetailScreen() {
         const meetingsSnap = await firestore()
           .collection('meetings')
           .where('classId', '==', classId)
-          .where('teacherUid', '==', user.uid) // <-- FIX: Added teacherUid filter for rules
+          .where('teacherUid', '==', user.uid)
           .where('status', '==', 'closed')
           .get();
 
@@ -183,19 +170,15 @@ export function ClassDetailScreen() {
         );
         const attendanceResults = await Promise.all(attendanceFetches);
 
-        const totals: Record<
-          string,
-          { name: string; present: number; absent: number; late: number; total: number }
-        > = {};
+        const totals: Record<string, { name: string; present: number; absent: number; late: number; total: number }> = {};
 
         attendanceResults.forEach(snap => {
           snap.docs.forEach(doc => {
             const d = doc.data();
             const uid  = d.studentUid  || doc.id;
             const name = d.studentName || 'Unknown';
-            if (!totals[uid]) {
-              totals[uid] = { name, present: 0, absent: 0, late: 0, total: 0 };
-            }
+            if (!totals[uid]) totals[uid] = { name, present: 0, absent: 0, late: 0, total: 0 };
+
             totals[uid].total += 1;
             if (d.status === 'present')       totals[uid].present += 1;
             else if (d.status === 'absent')   totals[uid].absent  += 1;
@@ -228,17 +211,11 @@ export function ClassDetailScreen() {
     ? meetings
     : meetings.filter(m => m.status === 'open');
 
-  const handleStudentAction = async (
-    enrollment: EnrolledStudent,
-    decision: 'approved' | 'rejected',
-  ) => {
+  const handleStudentAction = async (enrollment: EnrolledStudent, decision: 'approved' | 'rejected') => {
     if (processingStudentId) return;
     setProcessingStudentId(enrollment.id);
     try {
-      await firestore()
-        .collection('enrollments')
-        .doc(enrollment.id)
-        .update({ status: decision, updatedAt: firestore.FieldValue.serverTimestamp() });
+      await firestore().collection('enrollments').doc(enrollment.id).update({ status: decision, updatedAt: firestore.FieldValue.serverTimestamp() });
     } catch (err) {
       console.error('Failed to update enrollment:', err);
       Alert.alert('Error', 'Could not update enrollment. Please try again.');
@@ -284,15 +261,7 @@ export function ClassDetailScreen() {
       }, 300);
     } catch (error) {
       console.error('Failed to create meeting:', error);
-      const code = (error as { code?: string })?.code;
-      if (code === 'firestore/permission-denied') {
-        Alert.alert(
-          'Permission denied',
-          'This account is not allowed to create meetings yet. Confirm teacher approval, then sign out and sign in again.',
-        );
-      } else {
-        Alert.alert('Error', 'Could not create the attendance record. Please try again.');
-      }
+      Alert.alert('Error', 'Could not create the attendance record. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -302,17 +271,14 @@ export function ClassDetailScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
 
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="arrow-back" size={26} color={palette.ink} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Class Overview</Text>
         <View style={{ width: 26 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.infoCard}>
           <Text style={styles.className}>{name || 'Unnamed Class'}</Text>
           <Text style={styles.classMeta}>
@@ -332,11 +298,7 @@ export function ClassDetailScreen() {
               activeOpacity={0.7}
             >
               <Ionicons
-                name={
-                  tab === 'attendance' ? 'time-outline' :
-                  tab === 'students'   ? 'people-outline' :
-                  'bar-chart-outline'
-                }
+                name={tab === 'attendance' ? 'time-outline' : tab === 'students' ? 'people-outline' : 'bar-chart-outline'}
                 size={20}
                 color={activeTab === tab ? palette.primary : palette.muted}
               />
@@ -362,14 +324,6 @@ export function ClassDetailScreen() {
                     thumbColor={palette.white}
                   />
                 </View>
-                <TouchableOpacity
-                  style={styles.newMeetingBtn}
-                  activeOpacity={0.8}
-                  onPress={() => setShowMeetingModal(true)}
-                >
-                  <Ionicons name="add" size={20} color={palette.white} />
-                  <Text style={styles.newMeetingText}>NEW MEETING</Text>
-                </TouchableOpacity>
               </View>
 
               {isLoadingMeetings ? (
@@ -387,43 +341,20 @@ export function ClassDetailScreen() {
                     key={meeting.id}
                     style={styles.meetingCard}
                     activeOpacity={0.7}
-                    onPress={() =>
-                      navigation.navigate('RollCall', {
-                        meetingId: meeting.id,
-                        classId,
-                        className: name,
-                        section,
-                        date: meeting.date,
-                        time: meeting.time,
-                      })
-                    }
+                    onPress={() => navigation.navigate('RollCall', { meetingId: meeting.id, classId, className: name, section, date: meeting.date, time: meeting.time })}
                   >
                     <View style={styles.meetingInfo}>
-                      <Ionicons name="calendar-outline" size={20} color={palette.ink} />
-                      <Text style={styles.meetingDate}>
-                        {meeting.date} at {meeting.time}
-                      </Text>
-                      {meeting.isRecurring && (
-                        <Ionicons
-                          name="repeat-outline"
-                          size={16}
-                          color={palette.primary}
-                          style={{ marginLeft: 4 }}
-                        />
-                      )}
+                      <View style={styles.meetingIconBox}>
+                        <Ionicons name="calendar" size={24} color={meeting.status === 'open' ? palette.primary : palette.ink} />
+                      </View>
+                      <View>
+                        <Text style={styles.meetingDate}>{meeting.date}</Text>
+                        <Text style={styles.meetingTime}>{meeting.time} {meeting.isRecurring ? ' • Recurring' : ''}</Text>
+                      </View>
                     </View>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        { backgroundColor: meeting.status === 'open' ? '#ECFDF5' : '#FEF2F2' },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.statusText,
-                          { color: meeting.status === 'open' ? '#059669' : '#DC2626' },
-                        ]}
-                      >
+
+                    <View style={[styles.badgeBase, meeting.status === 'open' ? styles.badgePrimary : styles.badgeNeutral]}>
+                      <Text style={[styles.badgeBaseText, meeting.status === 'open' ? styles.badgePrimaryText : styles.badgeNeutralText]}>
                         {meeting.status.toUpperCase()}
                       </Text>
                     </View>
@@ -448,50 +379,25 @@ export function ClassDetailScreen() {
                     <View style={styles.studentInfo}>
                       <View style={styles.studentNameRow}>
                         <Text style={styles.studentName}>{student.studentName}</Text>
-                        {student.isWarning && (
-                          <Ionicons name="warning" size={14} color="#D97706" style={{ marginLeft: 6 }} />
-                        )}
                       </View>
                       <Text style={styles.studentEmail}>{student.studentEmail}</Text>
                       {student.status === 'approved' && (
-                        <Text style={styles.studentAbsences}>
-                          {student.absenceCount} absence{student.absenceCount !== 1 ? 's' : ''}
-                        </Text>
+                        <Text style={styles.studentAbsences}>{student.absenceCount} absence{student.absenceCount !== 1 ? 's' : ''}</Text>
                       )}
                     </View>
 
                     {student.status === 'pending' ? (
                       <View style={styles.studentActions}>
-                        <TouchableOpacity
-                          style={styles.rejectBtn}
-                          disabled={processingStudentId === student.id}
-                          onPress={() => handleStudentAction(student, 'rejected')}
-                        >
+                        <TouchableOpacity style={styles.rejectBtn} disabled={processingStudentId === student.id} onPress={() => handleStudentAction(student, 'rejected')}>
                           <Ionicons name="close-outline" size={16} color={palette.ink} />
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.approveBtn}
-                          disabled={processingStudentId === student.id}
-                          onPress={() => handleStudentAction(student, 'approved')}
-                        >
+                        <TouchableOpacity style={styles.approveBtn} disabled={processingStudentId === student.id} onPress={() => handleStudentAction(student, 'approved')}>
                           <Ionicons name="checkmark-outline" size={16} color={palette.white} />
                         </TouchableOpacity>
                       </View>
                     ) : (
-                      <View
-                        style={[
-                          styles.enrollStatusPill,
-                          student.status === 'approved'
-                            ? styles.enrollStatusApproved
-                            : styles.enrollStatusRejected,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.enrollStatusText,
-                            { color: student.status === 'approved' ? '#059669' : '#DC2626' },
-                          ]}
-                        >
+                      <View style={[styles.badgeBase, student.status === 'approved' ? styles.badgePrimary : styles.badgeNeutral]}>
+                        <Text style={[styles.badgeBaseText, student.status === 'approved' ? styles.badgePrimaryText : styles.badgeNeutralText]}>
                           {student.status.toUpperCase()}
                         </Text>
                       </View>
@@ -509,59 +415,29 @@ export function ClassDetailScreen() {
               ) : summaries.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Ionicons name="bar-chart-outline" size={40} color={palette.border} />
-                  <Text style={styles.emptyText}>
-                    No closed meetings yet. Finalize a roll call to see analysis.
-                  </Text>
+                  <Text style={styles.emptyText}>No closed meetings yet. Finalize a roll call to see analysis.</Text>
                 </View>
               ) : (
                 <>
                   <Text style={styles.analysisSubtitle}>
-                    Based on {meetings.filter(m => m.status === 'closed').length} closed meeting
-                    {meetings.filter(m => m.status === 'closed').length !== 1 ? 's' : ''}
+                    Based on {meetings.filter(m => m.status === 'closed').length} closed meeting{meetings.filter(m => m.status === 'closed').length !== 1 ? 's' : ''}
                   </Text>
                   {summaries.map((s, i) => (
                     <View key={i} style={styles.analysisCard}>
                       <View style={styles.analysisNameRow}>
                         <Text style={styles.analysisName}>{s.studentName}</Text>
-                        <Text
-                          style={[
-                            styles.analysisRate,
-                            { color: s.rate >= 80 ? '#059669' : s.rate >= 60 ? '#D97706' : '#DC2626' },
-                          ]}
-                        >
+                        <Text style={[styles.analysisRate, { color: s.rate >= 80 ? palette.primary : s.rate >= 60 ? palette.ink : palette.muted }]}>
                           {s.rate}%
                         </Text>
                       </View>
 
                       <View style={styles.progressTrack}>
-                        <View
-                          style={[
-                            styles.progressFill,
-                            {
-                              width: `${s.rate}%` as any,
-                              backgroundColor:
-                                s.rate >= 80 ? '#059669' : s.rate >= 60 ? '#D97706' : '#DC2626',
-                            },
-                          ]}
-                        />
+                        <View style={[styles.progressFill, { width: `${s.rate}%` as any, backgroundColor: s.rate >= 80 ? palette.primary : s.rate >= 60 ? palette.ink : palette.muted }]} />
                       </View>
 
                       <View style={styles.analysisPillRow}>
-                        <View style={[styles.miniPill, { backgroundColor: '#ECFDF5' }]}>
-                          <Text style={[styles.miniPillText, { color: '#059669' }]}>
-                            {s.present} present
-                          </Text>
-                        </View>
-                        <View style={[styles.miniPill, { backgroundColor: '#FEF2F2' }]}>
-                          <Text style={[styles.miniPillText, { color: '#DC2626' }]}>
-                            {s.absent} absent
-                          </Text>
-                        </View>
-                        <View style={[styles.miniPill, { backgroundColor: '#FFFBEB' }]}>
-                          <Text style={[styles.miniPillText, { color: '#D97706' }]}>
-                            {s.late} late
-                          </Text>
-                        </View>
+                        <View style={[styles.badgeBase, styles.badgePrimary]}><Text style={[styles.badgeBaseText, styles.badgePrimaryText]}>{s.present} present</Text></View>
+                        <View style={[styles.badgeBase, styles.badgeNeutral]}><Text style={[styles.badgeBaseText, styles.badgeNeutralText]}>{s.absent} absent</Text></View>
                       </View>
                     </View>
                   ))}
@@ -569,31 +445,29 @@ export function ClassDetailScreen() {
               )}
             </View>
           )}
-
         </View>
       </ScrollView>
 
-      {/* ── CREATE ATTENDANCE RECORD MODAL ── */}
-      <Modal
-        visible={showMeetingModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowMeetingModal(false)}
-      >
+      {/* ── EXTENDED FLOATING ACTION BUTTON ── */}
+      {activeTab === 'attendance' && (
+        <TouchableOpacity style={[styles.extendedFab, { bottom: Math.max(insets.bottom + 24, spacing.xl) }]} activeOpacity={0.85} onPress={() => setShowMeetingModal(true)}>
+          <Ionicons name="add" size={22} color={palette.white} />
+          <Text style={styles.extendedFabText}>New Meeting</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* ── CREATE ATTENDANCE MODAL ── */}
+      <Modal visible={showMeetingModal} transparent animationType="fade" onRequestClose={() => setShowMeetingModal(false)}>
         <TouchableWithoutFeedback onPress={() => setShowMeetingModal(false)}>
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.modalCard}>
-
                 <View style={styles.modalHeader}>
                   <View style={styles.modalTitleContainer}>
                     <Text style={styles.modalTitle}>Create Attendance Record</Text>
                     <Text style={styles.modalSubtitle}>{name} - Section {section}</Text>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => setShowMeetingModal(false)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
+                  <TouchableOpacity onPress={() => setShowMeetingModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Ionicons name="close" size={26} color={palette.ink} />
                   </TouchableOpacity>
                 </View>
@@ -603,35 +477,21 @@ export function ClassDetailScreen() {
                     <View style={styles.inputWrap}>
                       <Text style={styles.inputLabel}>Date</Text>
                       <View style={styles.inputFieldBox}>
-                        <TextInput
-                          style={styles.inputText}
-                          value={meetingDate}
-                          onChangeText={setMeetingDate}
-                        />
+                        <TextInput style={styles.inputText} value={meetingDate} onChangeText={setMeetingDate} />
                         <Ionicons name="calendar-outline" size={20} color={palette.muted} />
                       </View>
                     </View>
-
                     <View style={styles.inputWrap}>
                       <Text style={styles.inputLabel}>Time</Text>
                       <View style={styles.inputFieldBox}>
-                        <TextInput
-                          style={styles.inputText}
-                          value={meetingTime}
-                          onChangeText={setMeetingTime}
-                        />
+                        <TextInput style={styles.inputText} value={meetingTime} onChangeText={setMeetingTime} />
                         <Ionicons name="time-outline" size={20} color={palette.muted} />
                       </View>
                     </View>
                   </View>
 
                   <View style={styles.modalToggleRow}>
-                    <Switch
-                      value={isRecurring}
-                      onValueChange={setIsRecurring}
-                      trackColor={{ false: palette.border, true: palette.primary }}
-                      thumbColor={palette.white}
-                    />
+                    <Switch value={isRecurring} onValueChange={setIsRecurring} trackColor={{ false: palette.border, true: palette.primary }} thumbColor={palette.white} />
                     <Text style={styles.modalToggleLabel}>Recurring Meeting</Text>
                   </View>
 
@@ -647,13 +507,7 @@ export function ClassDetailScreen() {
                       <View style={styles.inputWrap}>
                         <Text style={styles.inputLabel}>End Date</Text>
                         <View style={styles.inputFieldBox}>
-                          <TextInput
-                            style={styles.inputText}
-                            value={endDate}
-                            onChangeText={setEndDate}
-                            placeholder="YYYY/MM/DD"
-                            placeholderTextColor={palette.muted}
-                          />
+                          <TextInput style={styles.inputText} value={endDate} onChangeText={setEndDate} placeholder="YYYY/MM/DD" placeholderTextColor={palette.muted} />
                           <Ionicons name="calendar-outline" size={20} color={palette.muted} />
                         </View>
                       </View>
@@ -667,48 +521,14 @@ export function ClassDetailScreen() {
                       <Ionicons name="caret-down" size={16} color={palette.muted} />
                     </TouchableOpacity>
                   </View>
-
-                  <View style={styles.summaryBox}>
-                    <Text style={styles.summaryTitle}>Attendance Record Details:</Text>
-                    <Text style={styles.summaryText}>
-                      <Text style={styles.summaryBold}>Class:</Text> {name}
-                    </Text>
-                    <Text style={styles.summaryText}>
-                      <Text style={styles.summaryBold}>Date & Time:</Text> {meetingDate} {meetingTime}
-                    </Text>
-                    {isRecurring && (
-                      <Text style={styles.summaryText}>
-                        <Text style={styles.summaryBold}>Recurrence:</Text> {recurrenceType} until{' '}
-                        {endDate || 'Not set'}
-                      </Text>
-                    )}
-                    <Text style={styles.summaryText}>
-                      <Text style={styles.summaryBold}>Status:</Text> {status}
-                    </Text>
-                    <Text style={styles.summaryText}>
-                      <Text style={styles.summaryBold}>Teacher:</Text> {fullName}
-                    </Text>
-                  </View>
                 </View>
 
                 <View style={styles.modalFooter}>
-                  <TouchableOpacity
-                    onPress={() => setShowMeetingModal(false)}
-                    style={styles.cancelBtn}
-                  >
+                  <TouchableOpacity onPress={() => setShowMeetingModal(false)} style={styles.cancelBtn}>
                     <Text style={styles.cancelBtnText}>CANCEL</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.createBtn}
-                    onPress={handleCreateMeeting}
-                    activeOpacity={0.85}
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? (
-                      <ActivityIndicator size="small" color={palette.white} />
-                    ) : (
-                      <Text style={styles.createBtnText}>CREATE RECORD</Text>
-                    )}
+                  <TouchableOpacity style={styles.createBtn} onPress={handleCreateMeeting} activeOpacity={0.85} disabled={isSubmitting}>
+                    {isSubmitting ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.createBtnText}>CREATE RECORD</Text>}
                   </TouchableOpacity>
                 </View>
 
@@ -717,27 +537,20 @@ export function ClassDetailScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-
     </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, backgroundColor: palette.bg,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, backgroundColor: palette.bg },
   headerTitle: { color: palette.ink, fontSize: 18, fontFamily: typography.primaryBold },
   infoCard: { padding: spacing.xl, backgroundColor: palette.bg },
   className: { color: palette.ink, fontSize: 32, fontFamily: typography.primaryBold, marginBottom: spacing.xs },
   classMeta: { color: palette.muted, fontSize: 14, fontFamily: typography.primaryMedium, marginBottom: 4 },
   codeHighlight: { color: palette.ink, fontFamily: typography.primaryBold },
+  scrollContent: { paddingBottom: 100 },
 
-  // Tabs
   tabContainer: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: palette.border, paddingHorizontal: spacing.xl },
   tabButton: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingVertical: spacing.lg, borderBottomWidth: 2, borderBottomColor: 'transparent', gap: spacing.xs },
   tabButtonActive: { borderBottomColor: palette.primary },
@@ -746,78 +559,65 @@ const styles = StyleSheet.create({
 
   content: { padding: spacing.xl },
   attendanceContent: { flex: 1 },
-  attendanceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.xxxl },
+  attendanceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xl },
   sectionTitle: { color: palette.ink, fontSize: 20, fontFamily: typography.primaryMedium },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   toggleLabel: { color: palette.muted, fontSize: 14, fontFamily: typography.primaryMedium },
-  newMeetingBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: palette.primary, paddingVertical: 10, paddingHorizontal: spacing.xl, borderRadius: 100, gap: spacing.xs },
-  newMeetingText: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 13, letterSpacing: 0.5 },
 
   emptyState: { paddingVertical: 60, alignItems: 'center', gap: spacing.md },
   emptyText: { color: palette.muted, fontSize: 15, fontFamily: typography.primaryRegular, textAlign: 'center' },
 
-  // Meeting cards
+  // ── REDESIGNED MEETING CARDS (Strict 60:30:10 Palette) ──
   meetingCard: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: spacing.lg, backgroundColor: palette.white,
-    borderRadius: 12, borderWidth: 1, borderColor: palette.border, marginBottom: spacing.md,
-    shadowColor: palette.ink, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1,
+    padding: spacing.md, paddingRight: spacing.xl, backgroundColor: palette.white,
+    borderRadius: 20, borderWidth: 1, borderColor: palette.border, marginBottom: spacing.md,
+    elevation: 2, shadowColor: palette.ink, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12,
+  },
+  meetingIconBox: {
+    width: 48, height: 48, borderRadius: 14, backgroundColor: palette.bg,
+    alignItems: 'center', justifyContent: 'center', marginRight: spacing.md,
+    borderWidth: 1, borderColor: palette.border,
   },
   meetingInfo: { flexDirection: 'row', alignItems: 'center' },
-  meetingDate: { color: palette.ink, fontSize: 15, fontFamily: typography.primaryBold, marginLeft: spacing.sm },
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
-  statusText: { fontSize: 10, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
+  meetingDate: { color: palette.ink, fontSize: 16, fontFamily: typography.primaryBold, marginBottom: 2 },
+  meetingTime: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryMedium },
+
+  // ── UNIVERSAL BADGE SYSTEM ──
+  badgeBase: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, borderWidth: 1 },
+  badgeBaseText: { fontSize: 10, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
+  badgePrimary: { backgroundColor: palette.white, borderColor: palette.primary },
+  badgePrimaryText: { color: palette.primary },
+  badgeNeutral: { backgroundColor: palette.bg, borderColor: palette.border },
+  badgeNeutralText: { color: palette.ink },
 
   // Student cards
-  studentCard: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: palette.white, borderRadius: 16,
-    padding: spacing.lg, marginBottom: spacing.md,
-    borderWidth: 1, borderColor: palette.border,
-    elevation: 1, shadowColor: palette.ink, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4,
-  },
+  studentCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: palette.white, borderRadius: 16, padding: spacing.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: palette.border, elevation: 1, shadowColor: palette.ink, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4 },
   studentInfo: { flex: 1, paddingRight: spacing.md },
   studentNameRow: { flexDirection: 'row', alignItems: 'center' },
   studentName: { color: palette.ink, fontSize: 16, fontFamily: typography.primaryBold },
   studentEmail: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryRegular, marginTop: 2 },
   studentAbsences: { color: palette.muted, fontSize: 12, fontFamily: typography.primaryMedium, marginTop: 2 },
   studentActions: { flexDirection: 'row', gap: spacing.sm },
-  rejectBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  approveBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: palette.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  enrollStatusPill: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: 100 },
-  enrollStatusApproved: { backgroundColor: '#ECFDF5' },
-  enrollStatusRejected: { backgroundColor: '#FEF2F2' },
-  enrollStatusText: { fontSize: 11, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
+  rejectBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' },
+  approveBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.primary, alignItems: 'center', justifyContent: 'center' },
 
   // Analysis cards
   analysisSubtitle: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryRegular, marginBottom: spacing.lg },
-  analysisCard: {
-    backgroundColor: palette.white, borderRadius: 16,
-    padding: spacing.lg, marginBottom: spacing.md,
-    borderWidth: 1, borderColor: palette.border,
-    gap: spacing.sm,
-    elevation: 1, shadowColor: palette.ink, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4,
-  },
+  analysisCard: { backgroundColor: palette.white, borderRadius: 16, padding: spacing.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: palette.border, gap: spacing.sm, elevation: 1, shadowColor: palette.ink, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4 },
   analysisNameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   analysisName: { color: palette.ink, fontSize: 16, fontFamily: typography.primaryBold, flex: 1 },
   analysisRate: { fontSize: 18, fontFamily: typography.primaryBold },
   progressTrack: { height: 6, backgroundColor: palette.border, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: 6, borderRadius: 3 },
   analysisPillRow: { flexDirection: 'row', gap: spacing.sm },
-  miniPill: { paddingHorizontal: spacing.md, paddingVertical: 3, borderRadius: 100 },
-  miniPillText: { fontSize: 11, fontFamily: typography.primaryBold },
+
+  extendedFab: { position: 'absolute', right: spacing.xl, flexDirection: 'row', alignItems: 'center', backgroundColor: palette.primary, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 100, elevation: 8, shadowColor: palette.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 8, gap: spacing.xs },
+  extendedFabText: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 14, letterSpacing: 0.5 },
 
   // Modal
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
-  modalCard: { width: '100%', maxHeight: '85%', backgroundColor: palette.white, borderRadius: 20, padding: spacing.xxl, elevation: 24, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.2, shadowRadius: 24 },
+  modalCard: { width: '100%', maxHeight: '85%', backgroundColor: palette.white, borderRadius: 28, padding: spacing.xxl, elevation: 24, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.15, shadowRadius: 24 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.lg },
   modalTitleContainer: { flex: 1, paddingRight: spacing.md },
   modalTitle: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold, marginBottom: 4 },

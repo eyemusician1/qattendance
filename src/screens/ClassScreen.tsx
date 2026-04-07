@@ -11,6 +11,9 @@ import {
   TextInput,
   TouchableWithoutFeedback,
   ActivityIndicator,
+  Animated,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -80,6 +83,46 @@ export function ClassScreen() {
   const [generatedCode, setGeneratedCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingClassId, setDeletingClassId] = useState<string | null>(null);
+
+  // ── PRECISE SCROLL ANIMATION LOGIC ──
+  const [isAtTop, setIsAtTop] = useState(true);
+  const fadeAnim = React.useRef(new Animated.Value(1)).current;
+
+  // ── EXPANDABLE FAB LOGIC ──
+  const [isFabOpen, setIsFabOpen] = useState(false);
+  const fabExpanded = React.useRef(new Animated.Value(0)).current;
+
+  const toggleFab = () => {
+    const toValue = isFabOpen ? 0 : 1;
+    setIsFabOpen(!isFabOpen);
+    Animated.spring(fabExpanded, {
+      toValue,
+      useNativeDriver: true,
+      friction: 6,
+      tension: 40,
+    }).start();
+  };
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+
+    if (offsetY > 10 && isAtTop) {
+      setIsAtTop(false);
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+    else if (offsetY <= 10 && !isAtTop) {
+      setIsAtTop(true);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
 
   const sanitizeTimeDigits = (value: string) => value.replace(/\D/g, '').slice(0, 4);
 
@@ -284,6 +327,8 @@ export function ClassScreen() {
         style={styles.list}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       >
         {role === 'student' && (
           isLoadingClasses ? (
@@ -367,10 +412,7 @@ export function ClassScreen() {
                     {deletingClassId === cls.id ? (
                       <ActivityIndicator size="small" color="#DC2626" />
                     ) : (
-                      <>
-                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
-                        <Text style={styles.deleteClassText}>Delete</Text>
-                      </>
+                      <Text style={styles.deleteClassText}>Delete</Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -386,10 +428,85 @@ export function ClassScreen() {
         )}
       </ScrollView>
 
+      {/* ── FULL SCREEN OVERLAY FOR FAB MENU ── */}
       {role === 'teacher' && (
-        <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 80 }]} activeOpacity={0.8} onPress={openCreateModal}>
-          <Ionicons name="add" size={40} color={palette.white} />
-        </TouchableOpacity>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.fabOverlay,
+            { opacity: fabExpanded }
+          ]}
+          pointerEvents={isFabOpen ? 'auto' : 'none'}
+        >
+          <TouchableWithoutFeedback onPress={toggleFab}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+        </Animated.View>
+      )}
+
+      {/* ── EXPANDABLE FLOATING ACTION BUTTON (TEACHER ONLY) ── */}
+      {role === 'teacher' && (
+        <Animated.View
+          style={[styles.fabContainer, { bottom: insets.bottom + 80, opacity: fadeAnim }]}
+          pointerEvents={isAtTop || isFabOpen ? 'box-none' : 'none'}
+        >
+
+          {/* Expanded Menu Options */}
+          <Animated.View
+            style={[
+              styles.fabMenu,
+              {
+                opacity: fabExpanded,
+                transform: [{
+                  translateY: fabExpanded.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [20, 0]
+                  })
+                }],
+              }
+            ]}
+            pointerEvents={isFabOpen ? 'auto' : 'none'}
+          >
+            <TouchableOpacity
+              style={styles.fabMenuItem}
+              activeOpacity={0.8}
+              onPress={() => {
+                toggleFab();
+                setAlertModal({ visible: true, title: 'Upload ClassList', message: 'ClassList CSV upload functionality coming soon.', type: 'success' });
+              }}
+            >
+              <Ionicons name="cloud-upload-outline" size={22} color={palette.ink} />
+              <Text style={styles.fabMenuItemText}>Classlist</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.fabMenuItem}
+              activeOpacity={0.8}
+              onPress={() => {
+                toggleFab();
+                openCreateModal();
+              }}
+            >
+              <Ionicons name="folder-outline" size={22} color={palette.ink} />
+              <Text style={styles.fabMenuItemText}>Create Class</Text>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Primary FAB (Master Toggle) */}
+          <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={toggleFab}>
+            <Animated.View style={{
+              transform: [{
+                rotate: fabExpanded.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0deg', '45deg']
+                })
+              }]
+            }}>
+              <Ionicons name="add" size={40} color={palette.white} />
+            </Animated.View>
+          </TouchableOpacity>
+
+        </Animated.View>
       )}
 
       {/* ── CREATE CLASS MODAL ── */}
@@ -452,21 +569,15 @@ export function ClassScreen() {
                 </View>
 
                 <View style={styles.modalFooter}>
-                  <TouchableOpacity style={styles.attachmentBtn} activeOpacity={0.7}>
-                    <Ionicons name="attach-outline" size={20} color={palette.ink} />
-                    <Text style={styles.attachmentText}>ClassList</Text>
+                  <TouchableOpacity onPress={() => setShowCreateModal(false)} style={styles.cancelBtn}>
+                    <Text style={styles.cancelBtnText}>CANCEL</Text>
                   </TouchableOpacity>
 
-                  <View style={styles.actionButtons}>
-                    <TouchableOpacity onPress={() => setShowCreateModal(false)} style={styles.cancelBtn}>
-                      <Text style={styles.cancelBtnText}>CANCEL</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={[styles.createBtn, isSubmitting && { opacity: 0.7 }]} onPress={handleCreateClass} disabled={isSubmitting}>
-                      {isSubmitting ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.createBtnText}>CREATE</Text>}
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity style={[styles.createBtn, isSubmitting && { opacity: 0.7 }]} onPress={handleCreateClass} disabled={isSubmitting}>
+                    {isSubmitting ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.createBtnText}>CREATE</Text>}
+                  </TouchableOpacity>
                 </View>
+
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -552,7 +663,57 @@ const styles = StyleSheet.create({
   deleteClassText: { color: '#DC2626', fontSize: 12, fontFamily: typography.primaryBold, letterSpacing: 0.4 },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxxl, gap: spacing.md },
   emptyStateText: { color: palette.muted, fontFamily: typography.primaryRegular, textAlign: 'center', fontSize: 14 },
-  fab: { position: 'absolute', right: spacing.xl, width: 72, height: 72, borderRadius: 36, backgroundColor: palette.primary, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: palette.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 8 },
+
+  // ── EXPANDABLE FLOATING ACTION BUTTON SYSTEM ──
+  fabOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    zIndex: 10,
+  },
+  fabContainer: {
+    position: 'absolute',
+    right: spacing.xl,
+    alignItems: 'flex-end', // Aligns the menu items and FAB to the right
+    gap: spacing.md,
+    zIndex: 20,
+  },
+  fabMenu: {
+    alignItems: 'flex-end',
+    gap: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  fabMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: palette.white,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.xl,
+    borderRadius: 100,
+    gap: spacing.md,
+    elevation: 6,
+    shadowColor: palette.ink,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  fabMenuItemText: {
+    color: palette.ink,
+    fontSize: 15,
+    fontFamily: typography.primaryBold,
+    letterSpacing: 0.3,
+  },
+  fab: {
+    width: 72,
+    height: 72,
+    borderRadius: 24, // Premium Squircle Shape
+    backgroundColor: palette.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: palette.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8
+  },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   modalCard: { width: '100%', backgroundColor: palette.white, borderRadius: 16, padding: spacing.xxl, elevation: 24, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.2, shadowRadius: 24 },
@@ -574,13 +735,10 @@ const styles = StyleSheet.create({
   codeCallout: { backgroundColor: palette.bg, padding: spacing.lg, borderRadius: 8, marginBottom: spacing.xxl },
   codeCalloutText: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryRegular },
   codeHighlight: { color: palette.ink, fontFamily: typography.primaryBold },
-  modalFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
-  attachmentBtn: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: palette.border, borderRadius: 100 },
-  attachmentText: { color: palette.ink, fontSize: 13, fontFamily: typography.primaryMedium },
-  actionButtons: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.sm },
-  cancelBtn: { height: 40, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  modalFooter: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  cancelBtn: { height: 40, justifyContent: 'center', paddingHorizontal: spacing.sm },
   cancelBtnText: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
-  createBtn: { height: 40, minWidth: 92, backgroundColor: palette.primary, paddingHorizontal: spacing.xl, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  createBtn: { backgroundColor: palette.primary, height: 40, paddingHorizontal: spacing.xl, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
   createBtnText: { color: palette.white, fontSize: 13, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
 
   // Custom Alert Styles

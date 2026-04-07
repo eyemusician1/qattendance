@@ -33,22 +33,22 @@ type StudentAttendance = {
 type DialogType = 'cancel' | 'save' | 'finalize' | null;
 
 // ─────────────────────────────────────────────
-// Helpers
+// Strict Palette Helpers (60:30:10 Rule)
 // ─────────────────────────────────────────────
 
 const styles_badge = {
-  present:  { backgroundColor: '#ECFDF5' },
-  absent:   { backgroundColor: '#FEF2F2' },
-  late:     { backgroundColor: '#FFFBEB' },
-  excused:  { backgroundColor: '#EFF6FF' },
+  present:  { backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border },
+  absent:   { backgroundColor: palette.white, borderWidth: 1, borderColor: palette.primary },
+  late:     { backgroundColor: palette.white, borderWidth: 1, borderColor: palette.ink },
+  excused:  { backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border },
   unmarked: { backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border },
 };
 
 const styles_text = {
-  present:  { color: '#059669' },
-  absent:   { color: '#DC2626' },
-  late:     { color: '#D97706' },
-  excused:  { color: '#2563EB' },
+  present:  { color: palette.ink },
+  absent:   { color: palette.primary },
+  late:     { color: palette.ink },
+  excused:  { color: palette.muted },
   unmarked: { color: palette.muted },
 };
 
@@ -61,7 +61,7 @@ const STATUS_CONFIG: Record<string, { badge: object; text: object; label: string
 };
 
 // ─────────────────────────────────────────────
-// Dialog content config
+// Dialog content config (Strict Palette)
 // ─────────────────────────────────────────────
 
 const DIALOG_CONFIG: Record<
@@ -74,41 +74,41 @@ const DIALOG_CONFIG: Record<
     title: string;
     body: string;
     confirmLabel: string;
-    confirmStyle: 'danger' | 'primary' | 'success';
+    confirmStyle: 'primary' | 'ink';
     cancelLabel: string;
   }
 > = {
   cancel: {
     icon: 'trash-outline',
-    iconColor: '#DC2626',
-    iconBg: '#FEF2F2',
-    iconBorder: '#FECACA',
+    iconColor: palette.ink,
+    iconBg: palette.bg,
+    iconBorder: palette.border,
     title: 'Delete Meeting',
     body: 'This will permanently remove the meeting record and all attendance data. This action cannot be undone.',
-    confirmLabel: 'Yes, Delete',
-    confirmStyle: 'danger',
+    confirmLabel: 'Delete',
+    confirmStyle: 'ink',
     cancelLabel: 'Keep Meeting',
   },
   save: {
     icon: 'save-outline',
-    iconColor: palette.primary,
-    iconBg: palette.secondarySoft,
-    iconBorder: palette.secondary,
+    iconColor: palette.ink,
+    iconBg: palette.white,
+    iconBorder: palette.ink,
     title: 'Save Progress',
     body: 'Attendance changes will be saved. You can continue editing this meeting later.',
     confirmLabel: 'Save',
-    confirmStyle: 'primary',
+    confirmStyle: 'ink',
     cancelLabel: 'Cancel',
   },
   finalize: {
     icon: 'lock-closed-outline',
-    iconColor: '#059669',
-    iconBg: '#ECFDF5',
-    iconBorder: '#A7F3D0',
+    iconColor: palette.primary,
+    iconBg: palette.white,
+    iconBorder: palette.primary,
     title: 'Finalize Roll Call',
     body: 'This will close the meeting and lock all attendance records. Students will no longer be able to check in.',
     confirmLabel: 'Finalize',
-    confirmStyle: 'success',
+    confirmStyle: 'primary',
     cancelLabel: 'Go Back',
   },
 };
@@ -155,7 +155,7 @@ export function RollCallScreen() {
           setIsLoading(false);
         },
         error => {
-          console.error('Failed to load attendance:', error);
+          console.warn('Failed to load attendance:', error.message);
           setIsLoading(false);
         },
       );
@@ -186,8 +186,6 @@ export function RollCallScreen() {
         navigation.goBack();
 
       } else if (activeDialog === 'save') {
-        // Progress is already saved by Firestore real-time; this is a user acknowledgment.
-        // If you have local-only edits to flush, do it here.
         setActiveDialog(null);
 
       } else if (activeDialog === 'finalize') {
@@ -221,29 +219,40 @@ export function RollCallScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
         {/* ── METRICS BANNER ── */}
-        <View style={styles.bannerCard}>
-          <View style={styles.bannerHeader}>
+        <View style={styles.classCardWrapper}>
+          <View style={styles.classCardHeader}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.bannerTitle}>{className || 'Unnamed Class'}</Text>
-              <Text style={styles.bannerSubtitle}>Section {section || '--'} • {date}</Text>
+              <Text style={styles.classCardTitle}>{className || 'Unnamed Class'}</Text>
+              <Text style={styles.classCardSubtitle}>Section {section || '--'} • {date}</Text>
             </View>
-            <View style={styles.statusBadgeTop}>
-              <Text style={styles.statusBadgeTopText}>{meetingStatus.toUpperCase()}</Text>
+            <View style={[styles.statusBadgeTop, meetingStatus === 'open' ? styles.bannerStatusOpen : styles.bannerStatusClosed]}>
+              <Text style={[styles.statusBadgeTopText, meetingStatus === 'open' ? styles.bannerTextOpen : styles.bannerTextClosed]}>
+                {meetingStatus.toUpperCase()}
+              </Text>
             </View>
           </View>
 
-          <View style={styles.metricsGrid}>
-            {[
-              { value: presentCount,  label: 'Present'  },
-              { value: absentCount,   label: 'Absent'   },
-              { value: lateCount,     label: 'Late'     },
-              { value: unmarkedCount, label: 'Unmarked' },
-            ].map(({ value, label }) => (
-              <View key={label} style={styles.metricItem}>
-                <Text style={styles.metricValue}>{value}</Text>
-                <Text style={styles.metricLabel}>{label}</Text>
-              </View>
-            ))}
+          <View style={styles.metricsDivider} />
+
+          <View style={styles.metricsRow}>
+            <View style={styles.metricBlock}>
+              <Text style={styles.metricValue}>{presentCount}</Text>
+              <Text style={styles.metricLabel}>PRESENT</Text>
+            </View>
+            <View style={styles.metricBlock}>
+              <Text style={styles.metricValue}>{absentCount}</Text>
+              <Text style={styles.metricLabel}>ABSENT</Text>
+            </View>
+            <View style={styles.metricBlock}>
+              <Text style={styles.metricValue}>{lateCount}</Text>
+              <Text style={styles.metricLabel}>LATE</Text>
+            </View>
+            <View style={styles.metricBlockLast}>
+               <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setActiveDialog('cancel')}>
+                 <Ionicons name="trash-outline" size={16} color={palette.ink} />
+                 <Text style={styles.cancelBtnOutlineText}>CANCEL</Text>
+               </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -294,25 +303,25 @@ export function RollCallScreen() {
 
         <View style={styles.footerButtons}>
           <TouchableOpacity
-            style={styles.cancelBtn}
-            onPress={() => setActiveDialog('cancel')}
+            style={[styles.actionBtn, { backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border }]}
+            onPress={() => navigation.goBack()}
             activeOpacity={0.7}
           >
-            <Text style={styles.cancelBtnText}>DELETE</Text>
+            <Text style={[styles.actionBtnText, { color: palette.ink }]}>BACK</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.saveBtn}
+            style={[styles.actionBtn, { backgroundColor: palette.ink }]}
             onPress={() => setActiveDialog('save')}
             activeOpacity={0.7}
           >
-            <Text style={styles.saveBtnText}>SAVE</Text>
+            <Text style={styles.actionBtnText}>SAVE</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.submitBtn}
+            style={[styles.actionBtn, { backgroundColor: palette.primary }]}
             onPress={() => setActiveDialog('finalize')}
             activeOpacity={0.85}
           >
-            <Text style={styles.submitBtnText}>FINALIZE</Text>
+            <Text style={styles.actionBtnText}>SUBMIT</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -363,9 +372,7 @@ function ConfirmDialog({ visible, type, isProcessing, onConfirm, onCancel }: Con
   const cfg = DIALOG_CONFIG[type];
 
   const confirmBg =
-    cfg.confirmStyle === 'danger'  ? '#DC2626' :
-    cfg.confirmStyle === 'success' ? '#059669' :
-    palette.primary;
+    cfg.confirmStyle === 'primary' ? palette.primary : palette.ink;
 
   return (
     <Modal
@@ -448,11 +455,11 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: spacing.xxxl },
 
   // Banner
-  bannerCard: {
+  classCardWrapper: {
     backgroundColor: palette.primary,
     marginHorizontal: spacing.xl,
     borderRadius: 24,
-    padding: spacing.xxl,
+    padding: spacing.xl,
     elevation: 6,
     shadowColor: palette.primary,
     shadowOffset: { width: 0, height: 6 },
@@ -460,51 +467,73 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     marginBottom: spacing.lg,
   },
-  bannerHeader: {
+  classCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
-  bannerTitle: {
+  classCardTitle: {
     color: palette.white,
-    fontSize: 26,
+    fontSize: 24,
     fontFamily: typography.primaryBold,
     marginBottom: 4,
     flex: 1,
   },
-  bannerSubtitle: {
+  classCardSubtitle: {
     color: 'rgba(255,255,255,0.85)',
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: typography.primaryMedium,
   },
   statusBadgeTop: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 100,
   },
   statusBadgeTopText: {
-    color: palette.white,
     fontSize: 10,
     fontFamily: typography.primaryBold,
-    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  metricsGrid: {
+  bannerStatusOpen: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  bannerTextOpen: { color: palette.white },
+  bannerStatusClosed: { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
+  bannerTextClosed: { color: 'rgba(255,255,255,0.7)' },
+
+  metricsDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginVertical: spacing.lg,
+  },
+  metricsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.xxl,
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    padding: spacing.md,
-    borderRadius: 16,
+    alignItems: 'center',
   },
-  metricItem: { alignItems: 'center', gap: 2, flex: 1 },
+  metricBlock: { alignItems: 'center' },
   metricValue: { color: palette.white, fontSize: 20, fontFamily: typography.primaryBold },
   metricLabel: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 10,
     fontFamily: typography.primaryBold,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  metricBlockLast: { alignItems: 'flex-end', justifyContent: 'center' },
+
+  cancelBtnOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: palette.white,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 100,
+    gap: 4,
+  },
+  cancelBtnOutlineText: {
+    color: palette.ink,
+    fontSize: 11,
+    fontFamily: typography.primaryBold,
     letterSpacing: 0.5,
   },
 
@@ -524,6 +553,17 @@ const styles = StyleSheet.create({
     fontFamily: typography.primaryRegular,
     textAlign: 'center',
   },
+
+  tableContainer: { flex: 1, backgroundColor: palette.white, marginHorizontal: spacing.xl, marginBottom: spacing.md, borderWidth: 1, borderColor: palette.border, borderRadius: 16, overflow: 'hidden' },
+  tableTitle: { color: palette.muted, fontSize: 16, fontFamily: typography.primaryBold, padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: palette.border },
+  tableHeader: { flexDirection: 'row', padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: palette.border, backgroundColor: palette.bg },
+  tableHeaderText: { color: palette.ink, fontSize: 11, fontFamily: typography.primaryBold },
+  tableBody: { flex: 1 },
+  tableRow: { flexDirection: 'row', padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: palette.border },
+  rowText: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryMedium },
+  rowTextBold: { color: palette.ink, fontFamily: typography.primaryBold },
+  emptyRow: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
+  emptyText: { color: palette.ink, fontSize: 14, fontFamily: typography.primaryMedium },
 
   // Student card
   studentCard: {
@@ -555,7 +595,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.primaryMedium,
   },
 
-  // Status badge (base — colors applied via styles_badge/styles_text maps)
+  // Status badge (base)
   statusBadge:     { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
   statusBadgeText: { fontSize: 11, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
 
@@ -579,32 +619,35 @@ const styles = StyleSheet.create({
     fontFamily: typography.primaryMedium,
   },
   footerButtons: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  actionGroup: { flexDirection: 'row', gap: spacing.sm },
+  actionBtn: { flex: 1, paddingVertical: 14, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  actionBtnText: { color: palette.white, fontSize: 13, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
   cancelBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#DC2626',
+    borderColor: palette.border,
+    backgroundColor: palette.bg,
     paddingVertical: 14,
     borderRadius: 100,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelBtnText: {
-    color: '#DC2626',
+    color: palette.ink,
     fontSize: 13,
     fontFamily: typography.primaryBold,
     letterSpacing: 0.5,
   },
   saveBtn: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: palette.border,
+    backgroundColor: palette.ink,
     paddingVertical: 14,
     borderRadius: 100,
     alignItems: 'center',
     justifyContent: 'center',
   },
   saveBtnText: {
-    color: palette.ink,
+    color: palette.white,
     fontSize: 13,
     fontFamily: typography.primaryBold,
     letterSpacing: 0.5,
@@ -625,11 +668,11 @@ const styles = StyleSheet.create({
   },
 });
 
-// Dialog-specific styles kept separate for clarity
+// Dialog-specific styles
 const dlg = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   sheet: {
@@ -639,30 +682,33 @@ const dlg = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xxl,
     paddingBottom: spacing.xxxl,
-    gap: spacing.xl,
     alignItems: 'center',
-    // thin top border for polish
-    borderTopWidth: 1,
-    borderTopColor: palette.border,
+    elevation: 24,
+    shadowColor: palette.ink,
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
   },
   iconWrap: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    borderWidth: 1,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.lg,
   },
   textGroup: {
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xxl,
   },
   title: {
     color: palette.ink,
     fontSize: 22,
     fontFamily: typography.primaryBold,
     textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   body: {
     color: palette.muted,

@@ -364,22 +364,31 @@ export function ClassScreen() {
       confirmText: 'Delete',
       onConfirm: async () => {
         closeAlert();
-        if (deletingClassId) return;
+        if (deletingClassId || !user) return; // Prevent double clicks and enforce user context
         setDeletingClassId(cls.id);
+
         try {
+          // ── THE FIX: Added .where('teacherUid', '==', user.uid) to explicitly prove ownership to Firestore rules
           const [meetingSnap, enrollmentSnap] = await Promise.all([
-            firestore().collection('meetings').where('classId', '==', cls.id).get(),
-            firestore().collection('enrollments').where('classId', '==', cls.id).get(),
+            firestore().collection('meetings')
+              .where('classId', '==', cls.id)
+              .where('teacherUid', '==', user.uid)
+              .get(),
+            firestore().collection('enrollments')
+              .where('classId', '==', cls.id)
+              .where('teacherUid', '==', user.uid)
+              .get(),
           ]);
 
           const batch = firestore().batch();
           meetingSnap.docs.forEach(doc => batch.delete(doc.ref));
           enrollmentSnap.docs.forEach(doc => batch.delete(doc.ref));
           batch.delete(firestore().collection('classes').doc(cls.id));
+
           await batch.commit();
         } catch (error) {
           console.error('Failed to delete class:', error);
-          setAlertModal({ visible: true, title: 'Error', message: 'Could not delete the class.', type: 'error' });
+          setAlertModal({ visible: true, title: 'Error', message: 'Could not complete the deletion. Please check your permissions.', type: 'error' });
         } finally {
           setDeletingClassId(null);
         }
@@ -706,7 +715,7 @@ export function ClassScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* ── CUSTOM ALERT/FEEDBACK MODAL ── */}
+      {/* ── REDESIGNED BRAND ALERT MODAL (60:30:10 RULE) ── */}
       <Modal visible={alertModal.visible} transparent animationType="fade" onRequestClose={closeAlert}>
         <TouchableWithoutFeedback onPress={closeAlert}>
           <View style={styles.alertBackdrop}>
@@ -715,20 +724,22 @@ export function ClassScreen() {
 
                 <View style={[
                   styles.alertIconWrap,
-                  alertModal.type === 'success' && { backgroundColor: '#ECFDF5' },
-                  alertModal.type === 'error' && { backgroundColor: '#FEF2F2' },
-                  alertModal.type === 'warning' && { backgroundColor: '#FFFBEB' },
-                  alertModal.type === 'confirm' && { backgroundColor: '#FEF2F2' },
+                  alertModal.type === 'success' && { borderColor: palette.primary, backgroundColor: palette.white },
+                  alertModal.type === 'confirm' && { borderColor: palette.primary, backgroundColor: '#FFF5F5' },
+                  alertModal.type === 'error' && { borderColor: palette.ink, backgroundColor: palette.white },
+                  alertModal.type === 'warning' && { borderColor: palette.ink, backgroundColor: palette.bg },
                 ]}>
                   <Ionicons
                     name={
                       alertModal.type === 'success' ? 'checkmark-circle' :
+                      alertModal.type === 'confirm' ? 'warning-outline' :
                       alertModal.type === 'warning' ? 'alert-circle' : 'warning'
                     }
                     size={32}
                     color={
-                      alertModal.type === 'success' ? '#10B981' :
-                      alertModal.type === 'warning' ? '#D97706' : '#DC2626'
+                      alertModal.type === 'success' ? palette.primary :
+                      alertModal.type === 'confirm' ? palette.primary :
+                      palette.ink
                     }
                   />
                 </View>
@@ -741,12 +752,20 @@ export function ClassScreen() {
                     <TouchableOpacity style={styles.alertCancelBtn} onPress={closeAlert}>
                       <Text style={styles.alertCancelText}>Cancel</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.alertConfirmBtn} onPress={alertModal.onConfirm}>
+                    <TouchableOpacity
+                      style={[styles.alertConfirmBtn, { backgroundColor: palette.primary }]}
+                      onPress={alertModal.onConfirm}
+                      activeOpacity={0.85}
+                    >
                       <Text style={styles.alertConfirmText}>{alertModal.confirmText || 'Confirm'}</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <TouchableOpacity style={styles.alertGotItBtn} onPress={closeAlert}>
+                  <TouchableOpacity
+                    style={[styles.alertGotItBtn, { backgroundColor: alertModal.type === 'error' || alertModal.type === 'warning' ? palette.ink : palette.primary }]}
+                    onPress={closeAlert}
+                    activeOpacity={0.85}
+                  >
                     <Text style={styles.alertGotItText}>Got it</Text>
                   </TouchableOpacity>
                 )}
@@ -863,17 +882,17 @@ const styles = StyleSheet.create({
   createBtn: { backgroundColor: palette.primary, height: 40, paddingHorizontal: spacing.xl, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
   createBtnText: { color: palette.white, fontSize: 13, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
 
-  // Custom Alert Styles
-  alertBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  // ── STRICT BRANDED ALERT MODAL STYLES ──
+  alertBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
   alertCard: { width: '100%', backgroundColor: palette.white, borderRadius: 28, padding: spacing.xxl, alignItems: 'center', elevation: 24, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.15, shadowRadius: 24 },
-  alertIconWrap: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
+  alertIconWrap: { width: 64, height: 64, borderRadius: 32, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
   alertTitle: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold, textAlign: 'center', marginBottom: spacing.xs },
   alertMessage: { color: palette.muted, fontSize: 15, fontFamily: typography.primaryRegular, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xxl },
-  alertGotItBtn: { width: '100%', backgroundColor: palette.primary, paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  alertGotItBtn: { width: '100%', paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
   alertGotItText: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
   alertActionRow: { flexDirection: 'row', width: '100%', gap: spacing.md },
   alertCancelBtn: { flex: 1, backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border, paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
   alertCancelText: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
-  alertConfirmBtn: { flex: 1, backgroundColor: '#DC2626', paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  alertConfirmBtn: { flex: 1, paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
   alertConfirmText: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
 });

@@ -72,7 +72,7 @@ export function ClassScreen() {
     type: 'warning',
   });
 
-  // Create Modal State
+  // Teacher Create Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [newSection, setNewSection] = useState('');
@@ -84,11 +84,16 @@ export function ClassScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingClassId, setDeletingClassId] = useState<string | null>(null);
 
+  // Student Join Modal State
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinClassCode, setJoinClassCode] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
+
   // ── PRECISE SCROLL ANIMATION LOGIC ──
   const [isAtTop, setIsAtTop] = useState(true);
   const fadeAnim = React.useRef(new Animated.Value(1)).current;
 
-  // ── EXPANDABLE FAB LOGIC ──
+  // ── EXPANDABLE FAB LOGIC (Teacher) ──
   const [isFabOpen, setIsFabOpen] = useState(false);
   const fabExpanded = React.useRef(new Animated.Value(0)).current;
 
@@ -212,6 +217,71 @@ export function ClassScreen() {
 
   // ── ACTIONS ──
   const closeAlert = () => setAlertModal(prev => ({ ...prev, visible: false }));
+
+  const handleJoinClass = async () => {
+    if (!joinClassCode.trim()) {
+      setAlertModal({ visible: true, title: 'Code Required', message: 'Please enter a valid class code to join.', type: 'warning' });
+      return;
+    }
+    if (!user) return;
+
+    setIsJoining(true);
+    try {
+      const codeUpper = joinClassCode.trim().toUpperCase();
+      const classQuery = await firestore().collection('classes').where('code', '==', codeUpper).get();
+
+      if (classQuery.empty) {
+        setAlertModal({ visible: true, title: 'Not Found', message: `No class found with the code ${codeUpper}. Please double-check it.`, type: 'error' });
+        return;
+      }
+
+      const classDoc = classQuery.docs[0];
+      const classData = classDoc.data();
+
+      // Ensure not already enrolled
+      const enrollQuery = await firestore()
+        .collection('enrollments')
+        .where('studentUid', '==', user.uid)
+        .where('classId', '==', classDoc.id)
+        .get();
+
+      if (!enrollQuery.empty) {
+        setAlertModal({ visible: true, title: 'Already Requested', message: `You are already enrolled or have a pending request for ${classData.name}.`, type: 'warning' });
+        return;
+      }
+
+      await firestore().collection('enrollments').add({
+        classId: classDoc.id,
+        classCode: classData.code,
+        className: classData.name,
+        section: classData.section,
+        schedule: classData.schedule || 'TBA',
+        studentUid: user.uid,
+        studentName: fullName,
+        studentEmail: user.email,
+        teacherUid: classData.teacherUid,
+        status: 'pending',
+        absenceCount: 0,
+        isWarning: false,
+        attendanceStatus: 'Good Standing',
+        createdAt: firestore.FieldValue.serverTimestamp()
+      });
+
+      await firestore().collection('classes').doc(classDoc.id).update({
+        pendingCount: firestore.FieldValue.increment(1)
+      });
+
+      setShowJoinModal(false);
+      setJoinClassCode('');
+      setAlertModal({ visible: true, title: 'Request Sent', message: `Your request to join ${classData.name} has been sent to the instructor for approval.`, type: 'success' });
+
+    } catch (error) {
+      console.error('Failed to join class:', error);
+      setAlertModal({ visible: true, title: 'Error', message: 'Could not join the class. Please try again.', type: 'error' });
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   const openCreateModal = () => {
     const code = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -343,7 +413,6 @@ export function ClassScreen() {
               <TouchableOpacity key={cls.id} style={styles.classCard} activeOpacity={0.7}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.classCode}>{cls.code} • {cls.section}</Text>
-                  <Ionicons name="arrow-forward-outline" size={20} color={palette.primary} style={styles.navIcon} />
                 </View>
                 <View style={styles.cardBody}>
                   <Text style={styles.className}>{cls.name}</Text>
@@ -428,7 +497,7 @@ export function ClassScreen() {
         )}
       </ScrollView>
 
-      {/* ── FULL SCREEN OVERLAY FOR FAB MENU ── */}
+      {/* ── FULL SCREEN OVERLAY FOR TEACHER FAB MENU ── */}
       {role === 'teacher' && (
         <Animated.View
           style={[
@@ -444,14 +513,13 @@ export function ClassScreen() {
         </Animated.View>
       )}
 
-      {/* ── EXPANDABLE FLOATING ACTION BUTTON (TEACHER ONLY) ── */}
+      {/* ── EXPANDABLE FLOATING ACTION BUTTON (TEACHER) ── */}
       {role === 'teacher' && (
         <Animated.View
           style={[styles.fabContainer, { bottom: insets.bottom + 80, opacity: fadeAnim }]}
           pointerEvents={isAtTop || isFabOpen ? 'box-none' : 'none'}
         >
 
-          {/* Expanded Menu Options */}
           <Animated.View
             style={[
               styles.fabMenu,
@@ -492,7 +560,6 @@ export function ClassScreen() {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Primary FAB (Master Toggle) */}
           <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={toggleFab}>
             <Animated.View style={{
               transform: [{
@@ -509,7 +576,62 @@ export function ClassScreen() {
         </Animated.View>
       )}
 
-      {/* ── CREATE CLASS MODAL ── */}
+      {/* ── FLOATING ACTION BUTTON (STUDENT) ── */}
+      {role === 'student' && (
+        <Animated.View
+          style={[styles.fabContainer, { bottom: insets.bottom + 80, opacity: fadeAnim }]}
+          pointerEvents={isAtTop ? 'box-none' : 'none'}
+        >
+          <TouchableOpacity style={styles.fab} activeOpacity={0.8} onPress={() => setShowJoinModal(true)}>
+            <Ionicons name="add" size={40} color={palette.white} />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* ── STUDENT JOIN CLASS MODAL ── */}
+      <Modal visible={showJoinModal} transparent animationType="fade" onRequestClose={() => setShowJoinModal(false)}>
+        <TouchableWithoutFeedback onPress={() => setShowJoinModal(false)}>
+          <View style={styles.modalBackdrop}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.modalCard}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Join Class</Text>
+                  <TouchableOpacity onPress={() => setShowJoinModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="close" size={24} color={palette.ink} />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.modalSubtitle}>
+                  Enter the 4-character code provided by your instructor to send an enrollment request.
+                </Text>
+
+                <TextInput
+                  style={[styles.input, { textTransform: 'uppercase' }]}
+                  placeholder="e.g. A1B2"
+                  placeholderTextColor={palette.muted}
+                  value={joinClassCode}
+                  onChangeText={setJoinClassCode}
+                  maxLength={4}
+                  autoCapitalize="characters"
+                />
+
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity onPress={() => setShowJoinModal(false)} style={styles.cancelBtn}>
+                    <Text style={styles.cancelBtnText}>CANCEL</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={[styles.createBtn, isJoining && { opacity: 0.7 }]} onPress={handleJoinClass} disabled={isJoining}>
+                    {isJoining ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.createBtnText}>JOIN</Text>}
+                  </TouchableOpacity>
+                </View>
+
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* ── CREATE CLASS MODAL (TEACHER) ── */}
       <Modal visible={showCreateModal} transparent animationType="fade" onRequestClose={() => setShowCreateModal(false)}>
         <TouchableWithoutFeedback onPress={() => setShowCreateModal(false)}>
           <View style={styles.modalBackdrop}>
@@ -672,7 +794,7 @@ const styles = StyleSheet.create({
   fabContainer: {
     position: 'absolute',
     right: spacing.xl,
-    alignItems: 'flex-end', // Aligns the menu items and FAB to the right
+    alignItems: 'flex-end',
     gap: spacing.md,
     zIndex: 20,
   },
@@ -704,7 +826,7 @@ const styles = StyleSheet.create({
   fab: {
     width: 72,
     height: 72,
-    borderRadius: 24, // Premium Squircle Shape
+    borderRadius: 24,
     backgroundColor: palette.primary,
     alignItems: 'center',
     justifyContent: 'center',

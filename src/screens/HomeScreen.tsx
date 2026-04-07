@@ -46,9 +46,15 @@ export function HomeScreen() {
   const [adminPendingCount, setAdminPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // ── TEACHER STATE ──
   const [nextClass, setNextClass] = useState<{name: string; schedule: string} | null>(null);
   const [criticalStudentsCount, setCriticalStudentsCount] = useState(0);
   const [pendingReviewsCount, setPendingReviewsCount] = useState(0);
+
+  // ── STUDENT STATE (LIVE DATA) ──
+  const [studentEnrolledClasses, setStudentEnrolledClasses] = useState<any[]>([]);
+  const [studentLiveMeetings, setStudentLiveMeetings] = useState<any[]>([]);
+  const [studentWarnings, setStudentWarnings] = useState<any[]>([]);
 
   // ── SWIPEABLE ROLL CALL SHEET STATE ──
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassItem[]>([]);
@@ -59,6 +65,7 @@ export function HomeScreen() {
   const panY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const [sheetState, setSheetState] = useState<'closed'|'half'|'full'>('closed');
 
+  // ── ADMIN LISTENERS ──
   useEffect(() => {
     if (role !== 'admin') return;
     const unsubscribe = firestore().collection('roleApplications').where('status', '==', 'pending').onSnapshot(
@@ -73,101 +80,82 @@ export function HomeScreen() {
     setTimeout(() => setIsSyncing(false), 800);
   };
 
+  // ── ROLE-SPECIFIC REAL-TIME LISTENERS ──
   useEffect(() => {
-    if (role !== 'teacher' || !user) return;
+    if (!user) return;
 
-    const unsubscribeAllClasses = firestore()
-      .collection('classes')
-      .where('teacherUid', '==', user.uid)
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(snap => {
-        const classes: TeacherClassItem[] = snap.docs.map(doc => {
-          const data = doc.data() as Record<string, unknown>;
-          return {
-            id: doc.id,
-            name: typeof data.name === 'string' ? data.name : undefined,
-            section: typeof data.section === 'string' ? data.section : undefined,
-            code: typeof data.code === 'string' ? data.code : undefined,
-            schedule: typeof data.schedule === 'string' ? data.schedule : undefined,
-          };
-        });
+    if (role === 'teacher') {
+      const unsubscribeAllClasses = firestore().collection('classes').where('teacherUid', '==', user.uid).orderBy('createdAt', 'desc').onSnapshot(snap => {
+        const classes: TeacherClassItem[] = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as Record<string, unknown>) }));
         setTeacherClasses(classes);
-        if (classes.length > 0) {
-          setNextClass({ name: classes[0].name || 'Unnamed Class', schedule: classes[0].schedule || '--' });
-        } else {
-          setNextClass(null);
-        }
+        setNextClass(classes.length > 0 ? { name: classes[0].name || 'Unnamed Class', schedule: classes[0].schedule || '--' } : null);
       });
 
-    const unsubscribeReviews = firestore()
-      .collection('enrollments')
-      .where('teacherUid', '==', user.uid)
-      .where('status', '==', 'pending')
-      .onSnapshot(
-        snapshot => setPendingReviewsCount(snapshot.size),
-        error => console.warn('Failed to fetch pending reviews:', error)
+      const unsubscribeReviews = firestore().collection('enrollments').where('teacherUid', '==', user.uid).where('status', '==', 'pending').onSnapshot(
+        snapshot => setPendingReviewsCount(snapshot.size)
       );
 
-    const unsubscribeCritical = firestore()
-      .collection('enrollments')
-      .where('teacherUid', '==', user.uid)
-      .where('isCritical', '==', true)
-      .onSnapshot(
-        snapshot => setCriticalStudentsCount(snapshot.size),
-        error => console.warn('Failed to fetch critical students:', error)
+      const unsubscribeCritical = firestore().collection('enrollments').where('teacherUid', '==', user.uid).where('isCritical', '==', true).onSnapshot(
+        snapshot => setCriticalStudentsCount(snapshot.size)
       );
 
-    const unsubscribeMeetings = firestore()
-      .collection('meetings')
-      .where('status', '==', 'open')
-      .where('teacherUid', '==', fullName)
-      .onSnapshot(
+      const unsubscribeMeetings = firestore().collection('meetings').where('status', '==', 'open').where('teacherUid', '==', user.uid).onSnapshot(
         snapshot => {
           const mMap: Record<string, any> = {};
-          snapshot.docs.forEach(doc => {
-            const data = doc.data();
-            mMap[data.classId] = { id: doc.id, ...data };
-          });
+          snapshot.docs.forEach(doc => { mMap[doc.data().classId] = { id: doc.id, ...doc.data() }; });
           setActiveMeetings(mMap);
-        },
-        error => console.warn('Failed to fetch active meetings:', error)
+        }
       );
 
-    return () => {
-      unsubscribeAllClasses();
-      unsubscribeReviews();
-      unsubscribeCritical();
-      unsubscribeMeetings();
-    };
-  }, [role, user, fullName]);
-
-  const loadPendingTeacherApplication = useCallback(async () => {
-    if (!user || role !== 'student') {
-      setHasPendingTeacherApplication(false);
-      return;
+      return () => { unsubscribeAllClasses(); unsubscribeReviews(); unsubscribeCritical(); unsubscribeMeetings(); };
     }
+
+    if (role === 'student') {
+      const unsubscribeEnrollments = firestore().collection('enrollments').where('studentUid', '==', user.uid).onSnapshot(snap => {
+        const enrolled: any[] = [];
+        const warnings: any[] = [];
+        snap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.status === 'approved') {
+            enrolled.push({ id: doc.id, ...data });
+            if (data.isWarning) warnings.push({ id: doc.id, ...data });
+          }
+        });
+        setStudentEnrolledClasses(enrolled);
+        setStudentWarnings(warnings);
+      });
+
+      const unsubscribeMeetings = firestore().collection('meetings').where('status', '==', 'open').onSnapshot(snap => {
+        const live: any[] = [];
+        snap.docs.forEach(doc => live.push({ id: doc.id, ...doc.data() }));
+        setStudentLiveMeetings(live);
+      });
+
+      return () => { unsubscribeEnrollments(); unsubscribeMeetings(); };
+    }
+  }, [role, user]);
+
+  // Derived Student State
+  const myLiveMeetings = studentLiveMeetings.filter(m => studentEnrolledClasses.some(c => c.classId === m.classId));
+  const currentLiveMeeting = myLiveMeetings.length > 0 ? myLiveMeetings[0] : null;
+  const currentWarning = studentWarnings.length > 0 ? studentWarnings[0] : null;
+
+  // ── INSTRUCTOR APPLICATION ──
+  const loadPendingTeacherApplication = useCallback(async () => {
+    if (!user || role !== 'student') { setHasPendingTeacherApplication(false); return; }
     const snapshot = await firestore().collection('roleApplications').where('ownerUid', '==', user.uid).get();
-    const hasPending = snapshot.docs.some(doc => {
-      const data = doc.data();
-      return data.requestedRole === 'teacher' && data.status === 'pending';
-    });
+    const hasPending = snapshot.docs.some(doc => doc.data().requestedRole === 'teacher' && doc.data().status === 'pending');
     setHasPendingTeacherApplication(hasPending);
   }, [role, user]);
 
-  useEffect(() => {
-    loadPendingTeacherApplication().catch(console.error);
-  }, [loadPendingTeacherApplication]);
+  useEffect(() => { loadPendingTeacherApplication().catch(console.error); }, [loadPendingTeacherApplication]);
 
   const applyAsTeacher = async () => {
     if (!user || role !== 'student' || isApplying) return;
-
     setIsApplying(true);
     try {
       const existingSnapshot = await firestore().collection('roleApplications').where('ownerUid', '==', user.uid).get();
-      const alreadyPending = existingSnapshot.docs.some(doc => {
-        const data = doc.data();
-        return data.requestedRole === 'teacher' && data.status === 'pending';
-      });
+      const alreadyPending = existingSnapshot.docs.some(doc => doc.data().requestedRole === 'teacher' && doc.data().status === 'pending');
 
       if (alreadyPending) {
         setHasPendingTeacherApplication(true);
@@ -189,7 +177,6 @@ export function HomeScreen() {
       setShowNotifPanel(false);
       Alert.alert('Application sent', 'Your instructor application is now pending admin approval.');
     } catch (error) {
-      console.error('Failed to submit teacher application:', error);
       Alert.alert('Submission failed', 'Please try again in a moment.');
     } finally {
       setIsApplying(false);
@@ -204,19 +191,11 @@ export function HomeScreen() {
     setShowRollCallModal(true);
     setSheetState('full');
     setSelectedClassId(null);
-    Animated.spring(panY, {
-      toValue: insets.top + spacing.lg,
-      useNativeDriver: true,
-      bounciness: 4,
-    }).start();
+    Animated.spring(panY, { toValue: insets.top + spacing.lg, useNativeDriver: true, bounciness: 4 }).start();
   };
 
   const closeRollCallModal = () => {
-    Animated.timing(panY, {
-      toValue: SCREEN_HEIGHT,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => {
+    Animated.timing(panY, { toValue: SCREEN_HEIGHT, duration: 250, useNativeDriver: true }).start(() => {
       setShowRollCallModal(false);
       setSheetState('closed');
     });
@@ -227,19 +206,12 @@ export function HomeScreen() {
       onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 10,
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy < -50) {
-          // Swiped Up
           setSheetState('full');
           Animated.spring(panY, { toValue: insets.top + spacing.lg, useNativeDriver: true, bounciness: 4 }).start();
         } else if (gesture.dy > 50) {
-          // Swiped Down
           closeRollCallModal();
         } else {
-          // Snap back
-          Animated.spring(panY, {
-            toValue: insets.top + spacing.lg,
-            useNativeDriver: true,
-            bounciness: 4,
-          }).start();
+          Animated.spring(panY, { toValue: insets.top + spacing.lg, useNativeDriver: true, bounciness: 4 }).start();
         }
       },
     })
@@ -256,21 +228,9 @@ export function HomeScreen() {
     setTimeout(() => {
       if (isLive) {
         const meeting = activeMeetings[cls.id];
-        navigation.navigate('RollCall', {
-          meetingId: meeting.id,
-          classId: meeting.classId,
-          className: meeting.className,
-          section: meeting.section,
-          date: meeting.date,
-          time: meeting.time,
-        });
+        navigation.navigate('RollCall', { meetingId: meeting.id, classId: meeting.classId, className: meeting.className, section: meeting.section, date: meeting.date, time: meeting.time });
       } else {
-        navigation.navigate('ClassDetail', {
-          classId: cls.id,
-          name: cls.name,
-          section: cls.section,
-          code: cls.code
-        });
+        navigation.navigate('ClassDetail', { classId: cls.id, name: cls.name, section: cls.section, code: cls.code });
       }
     }, 250);
   };
@@ -294,39 +254,56 @@ export function HomeScreen() {
           )}
         </View>
 
+        {/* ============================== */}
+        {/* STUDENT DASHBOARD (LIVE DATA)  */}
+        {/* ============================== */}
         {role === 'student' && (
           <View style={styles.bentoContainer}>
-            <View style={[styles.cardFull, styles.alertCard]}>
+            <View style={[styles.cardFull, currentWarning ? styles.alertCard : styles.successCard]}>
               <View style={styles.cardHeaderRow}>
-                <Text style={styles.alertLabel}>Attendance Warning</Text>
-                <Text style={styles.alertTag}>STATUS</Text>
+                <Text style={currentWarning ? styles.alertLabel : styles.successLabel}>
+                  {currentWarning ? 'Attendance Warning' : 'Great Standing'}
+                </Text>
+                <Text style={currentWarning ? styles.alertTag : styles.successTag}>STATUS</Text>
               </View>
               <View style={styles.cardBody}>
-                <Text style={styles.alertHeader}>IT302 Limit Nearing</Text>
+                <Text style={currentWarning ? styles.alertHeader : styles.successHeader}>
+                  {currentWarning ? currentWarning.classCode || 'Limit Nearing' : 'No warnings'}
+                </Text>
+                <Text style={currentWarning ? styles.alertSub : styles.successSub}>
+                  {currentWarning ? `You have high absences in ${currentWarning.className}` : 'Keep up the perfect attendance!'}
+                </Text>
               </View>
             </View>
 
             <View style={styles.cardFull}>
               <View style={styles.cardHeaderRow}>
-                <View style={styles.badgeActive}>
-                  <Text style={styles.badgeTextActive}>Open Now</Text>
+                <View style={[styles.badgeBase, currentLiveMeeting ? styles.badgeActive : styles.badgeNeutral]}>
+                  <Text style={currentLiveMeeting ? styles.badgeTextActive : styles.badgeTextNeutral}>
+                    {currentLiveMeeting ? 'Open Now' : 'No Active Session'}
+                  </Text>
                 </View>
                 <Text style={styles.subtleTag}>LIVE SESSION</Text>
               </View>
               <View style={styles.cardBody}>
-                <Text style={styles.cardHeader}>Information Assurance</Text>
-                <Text style={styles.cardSub}>10:00 AM • Room 402</Text>
+                <Text style={styles.cardHeader}>{currentLiveMeeting ? currentLiveMeeting.className : 'Relax, you are free'}</Text>
+                <Text style={styles.cardSub}>{currentLiveMeeting ? `${currentLiveMeeting.time} • Section ${currentLiveMeeting.section}` : 'No ongoing classes right now'}</Text>
               </View>
             </View>
 
             <View style={styles.bentoRow}>
-              <TouchableOpacity style={[styles.bentoSquare, styles.bgPrimary]} activeOpacity={0.85}>
+              <TouchableOpacity
+                style={[styles.bentoSquare, styles.bgPrimary, !currentLiveMeeting && { opacity: 0.5 }]}
+                activeOpacity={0.85}
+                disabled={!currentLiveMeeting}
+                onPress={() => Alert.alert('Mark Present', 'Student code check-in feature coming soon!')}
+              >
                 <Ionicons name="checkmark-outline" size={26} color={palette.white} style={[styles.squareIconLight, { transform: [{ rotate: '0deg' }] }]} />
-                <Text style={styles.squareTextLight}>Mark Present</Text>
+                <Text style={styles.squareTextLight}>Check In</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.bentoSquare, styles.bgSurface]} activeOpacity={0.85}>
-                <Ionicons name="arrow-forward-outline" size={24} color={palette.ink} style={styles.squareIconDark} />
+              <TouchableOpacity style={[styles.bentoSquare, styles.bgSurface]} activeOpacity={0.85} onPress={() => navigation.navigate('Classes')}>
+                <Ionicons name="add-outline" size={26} color={palette.ink} style={[styles.squareIconDark, { transform: [{ rotate: '0deg' }] }]} />
                 <Text style={styles.squareTextDark}>Join Class</Text>
               </TouchableOpacity>
             </View>
@@ -419,7 +396,7 @@ export function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* ── REDESIGNED NOTIFICATION MODAL ── */}
+      {/* ── NOTIFICATION MODAL ── */}
       <Modal visible={showNotifPanel} transparent animationType="fade" onRequestClose={() => setShowNotifPanel(false)}>
         <TouchableWithoutFeedback onPress={() => setShowNotifPanel(false)}>
           <View style={styles.notifModalBackdrop}>
@@ -624,8 +601,12 @@ const styles = StyleSheet.create({
   successSub: { color: palette.muted, fontSize: 15, fontFamily: typography.primaryRegular },
   squareTextLight: { color: palette.white, fontSize: 18, fontFamily: typography.primaryBold },
   squareTextDark: { color: palette.ink, fontSize: 18, fontFamily: typography.primaryBold },
-  badgeActive: { alignSelf: 'flex-start', backgroundColor: palette.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 100 },
+
+  badgeBase: { alignSelf: 'flex-start', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 100, borderWidth: 1 },
+  badgeActive: { backgroundColor: palette.primary, borderColor: palette.primary },
+  badgeNeutral: { backgroundColor: palette.bg, borderColor: palette.border },
   badgeTextActive: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
+  badgeTextNeutral: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
 
   // ── REDESIGNED NOTIFICATION MODAL STYLES ──
   notifModalBackdrop: {

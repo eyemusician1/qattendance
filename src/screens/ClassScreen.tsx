@@ -4,13 +4,13 @@ import {
   StyleSheet,
   Text,
   View,
+  Platform,
   TouchableOpacity,
   ScrollView,
   Modal,
   TextInput,
   TouchableWithoutFeedback,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,13 +19,6 @@ import { palette, spacing, typography } from '../tokens';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import firestore from '@react-native-firebase/firestore';
-
-
-const STUDENT_CLASSES = [
-  { id: '1', code: 'IT302', name: 'Data Structures', section: 'A1', schedule: 'Mon/Wed • 10:00 AM', status: 'Perfect Attendance', isWarning: false },
-  { id: '2', code: 'CS411', name: 'Information Assurance', section: 'B2', schedule: 'Tue/Thu • 1:00 PM', status: 'Warning: 2 Absences', isWarning: true },
-  { id: '3', code: 'GE101', name: 'Understanding the Self', section: 'C1', schedule: 'Fri • 9:00 AM', status: 'Present (Current Week)', isWarning: false },
-];
 
 type TeacherClass = {
   id: string;
@@ -36,6 +29,27 @@ type TeacherClass = {
   pending: number;
 };
 
+type StudentClass = {
+  id: string;
+  code: string;
+  name: string;
+  section: string;
+  schedule: string;
+  status: string;
+  isWarning: boolean;
+};
+
+type Meridiem = 'AM' | 'PM';
+
+type AlertModalState = {
+  visible: boolean;
+  title: string;
+  message: string;
+  type: 'warning' | 'error' | 'success' | 'confirm';
+  confirmText?: string;
+  onConfirm?: () => void;
+};
+
 export function ClassScreen() {
   const { role } = useRole();
   const { user, fullName } = useAuth();
@@ -44,64 +58,141 @@ export function ClassScreen() {
 
   // ── STATE ──
   const [teacherClasses, setTeacherClasses] = useState<TeacherClass[]>([]);
+  const [studentClasses, setStudentClasses] = useState<StudentClass[]>([]);
   const [isLoadingClasses, setIsLoadingClasses] = useState(true);
 
-  // Modal State
+  // Custom Alert Modal State
+  const [alertModal, setAlertModal] = useState<AlertModalState>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'warning',
+  });
+
+  // Create Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [newSection, setNewSection] = useState('');
+  const [newStartDigits, setNewStartDigits] = useState('');
+  const [newEndDigits, setNewEndDigits] = useState('');
+  const [startMeridiem, setStartMeridiem] = useState<Meridiem>('AM');
+  const [endMeridiem, setEndMeridiem] = useState<Meridiem>('PM');
   const [generatedCode, setGeneratedCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingClassId, setDeletingClassId] = useState<string | null>(null);
 
-  // ── REAL-TIME LISTENER ──
+  const sanitizeTimeDigits = (value: string) => value.replace(/\D/g, '').slice(0, 4);
+
+  const formatTimeDigits = (digits: string) => {
+    if (!digits) return '';
+    if (digits.length <= 2) return digits;
+    return `${digits.slice(0, digits.length - 2)}:${digits.slice(-2)}`;
+  };
+
+  const buildTimeLabel = (digits: string, meridiem: Meridiem): string | null => {
+    if (digits.length < 3) return null;
+
+    const hourPart = digits.length === 3 ? digits.slice(0, 1) : digits.slice(0, 2);
+    const minutePart = digits.slice(-2);
+    const hour = Number(hourPart);
+    const minute = Number(minutePart);
+
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+    if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return null;
+
+    return `${hour}:${minutePart} ${meridiem}`;
+  };
+
+  // ── REAL-TIME LISTENERS ──
   useEffect(() => {
-    if (role !== 'teacher' || !user) {
-      setIsLoadingClasses(false);
-      return;
+    if (!user) return;
+
+    if (role === 'teacher') {
+      const unsubscribe = firestore()
+        .collection('classes')
+        .where('teacherUid', '==', user.uid)
+        .orderBy('createdAt', 'desc')
+        .onSnapshot(
+          snapshot => {
+            const classesData = snapshot.docs.map(doc => {
+              const data = doc.data();
+              return {
+                id: doc.id,
+                code: data.code || '----',
+                name: data.name || 'Unnamed Class',
+                section: data.section || '---',
+                enrolled: data.enrolledCount || 0,
+                pending: data.pendingCount || 0,
+              };
+            });
+            setTeacherClasses(classesData);
+            setIsLoadingClasses(false);
+          },
+          error => {
+            console.error('Failed to load teacher classes:', error);
+            setIsLoadingClasses(false);
+          }
+        );
+      return () => unsubscribe();
     }
 
-    const unsubscribe = firestore()
-      .collection('classes')
-      .where('teacherUid', '==', user.uid)
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(
-        snapshot => {
-          const classesData = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              code: data.code || '----',
-              name: data.name || 'Unnamed Class',
-              section: data.section || '---',
-              enrolled: data.enrolledCount || 0,
-              pending: data.pendingCount || 0,
-            };
-          });
-          setTeacherClasses(classesData);
-          setIsLoadingClasses(false);
-        },
-        error => {
-          console.error('Failed to load classes:', error);
-          setIsLoadingClasses(false);
-        }
-      );
-
-    return () => unsubscribe();
+    if (role === 'student') {
+      const unsubscribe = firestore()
+        .collection('enrollments')
+        .where('studentUid', '==', user.uid)
+        .where('status', '==', 'approved')
+        .onSnapshot(
+          snapshot => {
+            const enrolledData = snapshot.docs.map(doc => {
+              const data = doc.data();
+              return {
+                id: data.classId || doc.id,
+                code: data.classCode || '----',
+                name: data.className || 'Unknown Class',
+                section: data.section || '---',
+                schedule: data.schedule || 'TBA',
+                status: data.attendanceStatus || 'Good Standing',
+                isWarning: data.isWarning || false,
+              };
+            });
+            setStudentClasses(enrolledData);
+            setIsLoadingClasses(false);
+          },
+          error => {
+            console.error('Failed to load student classes:', error);
+            setIsLoadingClasses(false);
+          }
+        );
+      return () => unsubscribe();
+    }
   }, [role, user]);
 
   // ── ACTIONS ──
+  const closeAlert = () => setAlertModal(prev => ({ ...prev, visible: false }));
+
   const openCreateModal = () => {
-    // Generate a random 4-character alphanumeric code (e.g. "X14S")
     const code = Math.random().toString(36).substring(2, 6).toUpperCase();
     setGeneratedCode(code);
     setNewClassName('');
     setNewSection('');
+    setNewStartDigits('');
+    setNewEndDigits('');
+    setStartMeridiem('AM');
+    setEndMeridiem('PM');
     setShowCreateModal(true);
   };
 
   const handleCreateClass = async () => {
-    if (!newClassName.trim() || !newSection.trim()) {
-      Alert.alert('Required Fields', 'Please enter a class name and section.');
+    if (!newClassName.trim() || !newSection.trim() || !newStartDigits.trim() || !newEndDigits.trim()) {
+      setAlertModal({ visible: true, title: 'Required Fields', message: 'Please enter class name, section, start time, and end time.', type: 'warning' });
+      return;
+    }
+
+    const startTime = buildTimeLabel(newStartDigits, startMeridiem);
+    const endTime = buildTimeLabel(newEndDigits, endMeridiem);
+
+    if (!startTime || !endTime) {
+      setAlertModal({ visible: true, title: 'Invalid Time', message: 'Enter time as integer digits only (e.g. 230 or 1130).', type: 'warning' });
       return;
     }
 
@@ -109,11 +200,15 @@ export function ClassScreen() {
 
     setIsSubmitting(true);
     let createdClassId: string | null = null;
+    const schedule = `${startTime} - ${endTime}`;
 
     try {
       const docRef = await firestore().collection('classes').add({
         name: newClassName.trim(),
         section: newSection.trim(),
+        startTime,
+        endTime,
+        schedule,
         code: generatedCode,
         teacherUid: user.uid,
         teacherName: fullName,
@@ -126,12 +221,15 @@ export function ClassScreen() {
       setShowCreateModal(false);
     } catch (error) {
       console.error('Failed to create class:', error);
-      Alert.alert('Error', 'Could not create the class. Please try again.');
+      const code = (error as { code?: string })?.code;
+      if (code === 'firestore/permission-denied') {
+        setAlertModal({ visible: true, title: 'Permission Denied', message: 'Your account does not have teacher access in Firestore yet. Ask an admin to approve your role.', type: 'error' });
+      } else {
+        setAlertModal({ visible: true, title: 'Error', message: 'Could not create the class. Please try again.', type: 'error' });
+      }
     } finally {
       setIsSubmitting(false);
-
       if (createdClassId) {
-        // Give the modal 400ms to fade out, then jump to the new class.
         setTimeout(() => {
           navigation.navigate('ClassDetail', {
             classId: createdClassId,
@@ -142,6 +240,38 @@ export function ClassScreen() {
         }, 400);
       }
     }
+  };
+
+  const handleDeleteClass = (cls: TeacherClass) => {
+    setAlertModal({
+      visible: true,
+      title: 'Delete Class',
+      message: `Delete ${cls.name} (${cls.code})? This will remove the class and all associated meetings and enrollments.`,
+      type: 'confirm',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        closeAlert();
+        if (deletingClassId) return;
+        setDeletingClassId(cls.id);
+        try {
+          const [meetingSnap, enrollmentSnap] = await Promise.all([
+            firestore().collection('meetings').where('classId', '==', cls.id).get(),
+            firestore().collection('enrollments').where('classId', '==', cls.id).get(),
+          ]);
+
+          const batch = firestore().batch();
+          meetingSnap.docs.forEach(doc => batch.delete(doc.ref));
+          enrollmentSnap.docs.forEach(doc => batch.delete(doc.ref));
+          batch.delete(firestore().collection('classes').doc(cls.id));
+          await batch.commit();
+        } catch (error) {
+          console.error('Failed to delete class:', error);
+          setAlertModal({ visible: true, title: 'Error', message: 'Could not delete the class.', type: 'error' });
+        } finally {
+          setDeletingClassId(null);
+        }
+      }
+    });
   };
 
   return (
@@ -155,26 +285,35 @@ export function ClassScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── STUDENT ── */}
-        {role === 'student' && STUDENT_CLASSES.map((cls) => (
-          <TouchableOpacity key={cls.id} style={styles.classCard} activeOpacity={0.7}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.classCode}>{cls.code} • {cls.section}</Text>
-              <Ionicons name="arrow-forward-outline" size={20} color={palette.primary} style={styles.navIcon} />
+        {role === 'student' && (
+          isLoadingClasses ? (
+            <ActivityIndicator size="large" color={palette.primary} style={{ marginTop: spacing.xxxl }} />
+          ) : studentClasses.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="library-outline" size={48} color={palette.border} />
+              <Text style={styles.emptyStateText}>You are not enrolled in any classes.</Text>
             </View>
-            <View style={styles.cardBody}>
-              <Text style={styles.className}>{cls.name}</Text>
-              <Text style={styles.classSchedule}>{cls.schedule}</Text>
-            </View>
-            <View style={[styles.snapshotPill, cls.isWarning && styles.snapshotPillWarning]}>
-              <Text style={[styles.snapshotText, cls.isWarning && styles.snapshotTextWarning]}>
-                {cls.status}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+          ) : (
+            studentClasses.map((cls) => (
+              <TouchableOpacity key={cls.id} style={styles.classCard} activeOpacity={0.7}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={styles.classCode}>{cls.code} • {cls.section}</Text>
+                  <Ionicons name="arrow-forward-outline" size={20} color={palette.primary} style={styles.navIcon} />
+                </View>
+                <View style={styles.cardBody}>
+                  <Text style={styles.className}>{cls.name}</Text>
+                  <Text style={styles.classSchedule}>{cls.schedule}</Text>
+                </View>
+                <View style={[styles.snapshotPill, cls.isWarning && styles.snapshotPillWarning]}>
+                  <Text style={[styles.snapshotText, cls.isWarning && styles.snapshotTextWarning]}>
+                    {cls.status}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          )
+        )}
 
-        {/* ── TEACHER (DYNAMIC FIREBASE LIST) ── */}
         {role === 'teacher' && (
           isLoadingClasses ? (
             <ActivityIndicator size="large" color={palette.primary} style={{ marginTop: spacing.xxxl }} />
@@ -185,13 +324,17 @@ export function ClassScreen() {
             </View>
           ) : (
             teacherClasses.map((cls) => (
-              <TouchableOpacity key={cls.id} style={styles.classCard} activeOpacity={0.7}
-              onPress={() => navigation.navigate('ClassDetail', {
-                classid: cls.id,
-                name: cls.name,
-                section: cls.section,
-                code: cls.code
-              })}>
+              <TouchableOpacity
+                key={cls.id}
+                style={styles.classCard}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('ClassDetail', {
+                  classId: cls.id,
+                  name: cls.name,
+                  section: cls.section,
+                  code: cls.code
+                })}
+              >
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.classCode}>{cls.code} • {cls.section}</Text>
                   <Ionicons name="arrow-forward-outline" size={20} color={palette.primary} style={styles.navIcon} />
@@ -200,55 +343,61 @@ export function ClassScreen() {
                   <Text style={styles.className}>{cls.name}</Text>
                   <Text style={styles.classSchedule}>Manage Roster & Attendance</Text>
                 </View>
-                <View style={styles.pillRow}>
-                  <View style={styles.snapshotPill}>
-                    <Text style={styles.snapshotText}>{cls.enrolled} Enrolled</Text>
-                  </View>
-                  {cls.pending > 0 && (
-                    <View style={styles.snapshotPillWarning}>
-                      <Text style={styles.snapshotTextWarning}>{cls.pending} Needs Review</Text>
+                <View style={styles.classCardFooter}>
+                  <View style={styles.pillRow}>
+                    <View style={styles.snapshotPill}>
+                      <Text style={styles.snapshotText}>{cls.enrolled} Enrolled</Text>
                     </View>
-                  )}
+                    {cls.pending > 0 && (
+                      <View style={styles.snapshotPillWarning}>
+                        <Text style={styles.snapshotTextWarning}>{cls.pending} Needs Review</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.deleteClassBtn, deletingClassId === cls.id && styles.deleteClassBtnDisabled]}
+                    activeOpacity={0.8}
+                    disabled={deletingClassId === cls.id}
+                    onPress={(event: any) => {
+                      if (event?.stopPropagation) event.stopPropagation();
+                      handleDeleteClass(cls);
+                    }}
+                  >
+                    {deletingClassId === cls.id ? (
+                      <ActivityIndicator size="small" color="#DC2626" />
+                    ) : (
+                      <>
+                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                        <Text style={styles.deleteClassText}>Delete</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </TouchableOpacity>
             ))
           )
         )}
 
-        {/* ── ADMIN ── */}
         {role === 'admin' && (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
-              Admins manage classes via the System Dashboard.
-            </Text>
+            <Text style={styles.emptyStateText}>Admins manage classes via the System Dashboard.</Text>
           </View>
         )}
       </ScrollView>
 
-      {/* ── FLOATING ACTION BUTTON (TEACHER ONLY) ── */}
       {role === 'teacher' && (
-        <TouchableOpacity
-          style={[styles.fab, { bottom: insets.bottom + 80 }]}
-          activeOpacity={0.8}
-          onPress={openCreateModal}
-        >
+        <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 80 }]} activeOpacity={0.8} onPress={openCreateModal}>
           <Ionicons name="add" size={40} color={palette.white} />
         </TouchableOpacity>
       )}
 
       {/* ── CREATE CLASS MODAL ── */}
-      <Modal
-        visible={showCreateModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowCreateModal(false)}
-      >
+      <Modal visible={showCreateModal} transparent animationType="fade" onRequestClose={() => setShowCreateModal(false)}>
         <TouchableWithoutFeedback onPress={() => setShowCreateModal(false)}>
           <View style={styles.modalBackdrop}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.modalCard}>
-
-                {/* Header */}
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Create class</Text>
                   <TouchableOpacity onPress={() => setShowCreateModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -256,62 +405,118 @@ export function ClassScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Subtitle */}
                 <Text style={styles.modalSubtitle}>
                   You're creating a class. After you enter the class name and section, you can add students.
                 </Text>
 
-                {/* Form Inputs */}
-                <TextInput
-                  style={styles.input}
-                  placeholder="Class name"
-                  placeholderTextColor={palette.muted}
-                  value={newClassName}
-                  onChangeText={setNewClassName}
-                />
+                <TextInput style={styles.input} placeholder="Class name" placeholderTextColor={palette.muted} value={newClassName} onChangeText={setNewClassName} />
+                <TextInput style={styles.input} placeholder="Section" placeholderTextColor={palette.muted} value={newSection} onChangeText={setNewSection} />
 
-                <TextInput
-                  style={styles.input}
-                  placeholder="Section"
-                  placeholderTextColor={palette.muted}
-                  value={newSection}
-                  onChangeText={setNewSection}
-                />
+                <View style={styles.timeRow}>
+                  <View style={styles.timeInputBlock}>
+                    <View style={styles.timeHeaderRow}>
+                      <Text style={styles.timeHeaderLabel}>Start</Text>
+                      <View style={styles.periodSwitch}>
+                        <TouchableOpacity style={[styles.periodBtn, startMeridiem === 'AM' && styles.periodBtnActive]} onPress={() => setStartMeridiem('AM')}>
+                          <Text style={[styles.periodText, startMeridiem === 'AM' && styles.periodTextActive]}>AM</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.periodBtn, startMeridiem === 'PM' && styles.periodBtnActive]} onPress={() => setStartMeridiem('PM')}>
+                          <Text style={[styles.periodText, startMeridiem === 'PM' && styles.periodTextActive]}>PM</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <TextInput style={[styles.input, styles.timeInput]} placeholder="e.g. 230" placeholderTextColor={palette.muted} keyboardType="number-pad" value={formatTimeDigits(newStartDigits)} onChangeText={text => setNewStartDigits(sanitizeTimeDigits(text))} />
+                  </View>
 
-                {/* Auto-generated Code Callout */}
+                  <View style={styles.timeInputBlock}>
+                    <View style={styles.timeHeaderRow}>
+                      <Text style={styles.timeHeaderLabel}>End</Text>
+                      <View style={styles.periodSwitch}>
+                        <TouchableOpacity style={[styles.periodBtn, endMeridiem === 'AM' && styles.periodBtnActive]} onPress={() => setEndMeridiem('AM')}>
+                          <Text style={[styles.periodText, endMeridiem === 'AM' && styles.periodTextActive]}>AM</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.periodBtn, endMeridiem === 'PM' && styles.periodBtnActive]} onPress={() => setEndMeridiem('PM')}>
+                          <Text style={[styles.periodText, endMeridiem === 'PM' && styles.periodTextActive]}>PM</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <TextInput style={[styles.input, styles.timeInput]} placeholder="e.g. 400" placeholderTextColor={palette.muted} keyboardType="number-pad" value={formatTimeDigits(newEndDigits)} onChangeText={text => setNewEndDigits(sanitizeTimeDigits(text))} />
+                  </View>
+                </View>
+                <Text style={styles.timeHintText}>Enter digits only, format example: 230 for 2:30</Text>
+
                 <View style={styles.codeCallout}>
                   <Text style={styles.codeCalloutText}>
                     The class code will be automatically generated: <Text style={styles.codeHighlight}>{generatedCode}</Text>
                   </Text>
                 </View>
 
-                {/* Footer Row */}
                 <View style={styles.modalFooter}>
-                  {/* File Attachment Mock */}
                   <TouchableOpacity style={styles.attachmentBtn} activeOpacity={0.7}>
                     <Ionicons name="attach-outline" size={20} color={palette.ink} />
                     <Text style={styles.attachmentText}>ClassList</Text>
                   </TouchableOpacity>
 
-                  {/* Actions */}
                   <View style={styles.actionButtons}>
                     <TouchableOpacity onPress={() => setShowCreateModal(false)} style={styles.cancelBtn}>
                       <Text style={styles.cancelBtnText}>CANCEL</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[styles.createBtn, isSubmitting && { opacity: 0.7 }]}
-                      onPress={handleCreateClass}
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? (
-                        <ActivityIndicator size="small" color={palette.white} />
-                      ) : (
-                        <Text style={styles.createBtnText}>CREATE</Text>
-                      )}
+                    <TouchableOpacity style={[styles.createBtn, isSubmitting && { opacity: 0.7 }]} onPress={handleCreateClass} disabled={isSubmitting}>
+                      {isSubmitting ? <ActivityIndicator size="small" color={palette.white} /> : <Text style={styles.createBtnText}>CREATE</Text>}
                     </TouchableOpacity>
                   </View>
                 </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* ── CUSTOM ALERT/FEEDBACK MODAL ── */}
+      <Modal visible={alertModal.visible} transparent animationType="fade" onRequestClose={closeAlert}>
+        <TouchableWithoutFeedback onPress={closeAlert}>
+          <View style={styles.alertBackdrop}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.alertCard}>
+
+                <View style={[
+                  styles.alertIconWrap,
+                  alertModal.type === 'success' && { backgroundColor: '#ECFDF5' },
+                  alertModal.type === 'error' && { backgroundColor: '#FEF2F2' },
+                  alertModal.type === 'warning' && { backgroundColor: '#FFFBEB' },
+                  alertModal.type === 'confirm' && { backgroundColor: '#FEF2F2' },
+                ]}>
+                  <Ionicons
+                    name={
+                      alertModal.type === 'success' ? 'checkmark-circle' :
+                      alertModal.type === 'warning' ? 'alert-circle' : 'warning'
+                    }
+                    size={32}
+                    color={
+                      alertModal.type === 'success' ? '#10B981' :
+                      alertModal.type === 'warning' ? '#D97706' : '#DC2626'
+                    }
+                  />
+                </View>
+
+                <Text style={styles.alertTitle}>{alertModal.title}</Text>
+                <Text style={styles.alertMessage}>{alertModal.message}</Text>
+
+                {alertModal.type === 'confirm' ? (
+                  <View style={styles.alertActionRow}>
+                    <TouchableOpacity style={styles.alertCancelBtn} onPress={closeAlert}>
+                      <Text style={styles.alertCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.alertConfirmBtn} onPress={alertModal.onConfirm}>
+                      <Text style={styles.alertConfirmText}>{alertModal.confirmText || 'Confirm'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.alertGotItBtn} onPress={closeAlert}>
+                    <Text style={styles.alertGotItText}>Got it</Text>
+                  </TouchableOpacity>
+                )}
 
               </View>
             </TouchableWithoutFeedback>
@@ -324,252 +529,71 @@ export function ClassScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: palette.bg,
-  },
-  header: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.md,
-    backgroundColor: palette.bg,
-  },
-  pageTitle: {
-    color: palette.ink,
-    fontSize: 42,
-    fontFamily: typography.primaryBold,
-  },
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxxl * 2,
-    gap: spacing.lg,
-  },
-  classCard: {
-    backgroundColor: palette.white,
-    borderRadius: 24,
-    padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: palette.border,
-    gap: spacing.md,
-    elevation: 2,
-    shadowColor: palette.ink,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  classCode: {
-    color: palette.primary,
-    fontSize: 12,
-    fontFamily: typography.primaryBold,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  navIcon: {
-    opacity: 0.6,
-    transform: [{ rotate: '-45deg' }],
-  },
-  cardBody: {
-    gap: spacing.xs,
-  },
-  className: {
-    color: palette.ink,
-    fontSize: 22,
-    fontFamily: typography.primaryBold,
-  },
-  classSchedule: {
-    color: palette.muted,
-    fontSize: 15,
-    fontFamily: typography.primaryRegular,
-  },
-  pillRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  snapshotPill: {
-    alignSelf: 'flex-start',
-    backgroundColor: palette.bg,
-    borderWidth: 1,
-    borderColor: palette.border,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: 100,
-  },
-  snapshotText: {
-    color: palette.ink,
-    fontFamily: typography.primaryBold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  snapshotPillWarning: {
-    alignSelf: 'flex-start',
-    backgroundColor: palette.secondarySoft,
-    borderColor: palette.secondary,
-    borderWidth: 1,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: 100,
-  },
-  snapshotTextWarning: {
-    color: palette.ink,
-    fontFamily: typography.primaryBold,
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.xxxl,
-    gap: spacing.md,
-  },
-  emptyStateText: {
-    color: palette.muted,
-    fontFamily: typography.primaryRegular,
-    textAlign: 'center',
-    fontSize: 14,
-  },
+  container: { flex: 1, backgroundColor: palette.bg },
+  header: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.md, backgroundColor: palette.bg },
+  pageTitle: { color: palette.ink, fontSize: 42, fontFamily: typography.primaryBold },
+  list: { flex: 1 },
+  listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xxxl * 2, gap: spacing.lg },
+  classCard: { backgroundColor: palette.white, borderRadius: 24, padding: spacing.xl, borderWidth: 1, borderColor: palette.border, gap: spacing.md, elevation: 2, shadowColor: palette.ink, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12 },
+  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  classCode: { color: palette.primary, fontSize: 12, fontFamily: typography.primaryBold, textTransform: 'uppercase', letterSpacing: 1.2 },
+  navIcon: { opacity: 0.6, transform: [{ rotate: '-45deg' }] },
+  cardBody: { gap: spacing.xs },
+  className: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold },
+  classSchedule: { color: palette.muted, fontSize: 15, fontFamily: typography.primaryRegular },
+  classCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  snapshotPill: { alignSelf: 'flex-start', backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 100 },
+  snapshotText: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
+  snapshotPillWarning: { alignSelf: 'flex-start', backgroundColor: palette.secondarySoft, borderColor: palette.secondary, borderWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 100 },
+  snapshotTextWarning: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
+  deleteClassBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: 1, borderColor: '#FECACA', backgroundColor: '#FEF2F2', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 100 },
+  deleteClassBtnDisabled: { opacity: 0.7 },
+  deleteClassText: { color: '#DC2626', fontSize: 12, fontFamily: typography.primaryBold, letterSpacing: 0.4 },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxxl, gap: spacing.md },
+  emptyStateText: { color: palette.muted, fontFamily: typography.primaryRegular, textAlign: 'center', fontSize: 14 },
+  fab: { position: 'absolute', right: spacing.xl, width: 72, height: 72, borderRadius: 36, backgroundColor: palette.primary, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: palette.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 8 },
 
-  // ── FLOATING ACTION BUTTON ──
-  fab: {
-    position: 'absolute',
-    right: spacing.xl,
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: palette.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 8,
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  modalCard: { width: '100%', backgroundColor: palette.white, borderRadius: 16, padding: spacing.xxl, elevation: 24, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.2, shadowRadius: 24 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  modalTitle: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold },
+  modalSubtitle: { color: palette.muted, fontSize: 14, fontFamily: typography.primaryRegular, lineHeight: 20, marginBottom: spacing.xl },
+  input: { backgroundColor: palette.white, borderWidth: 1, borderColor: palette.border, borderRadius: 8, paddingHorizontal: spacing.lg, paddingVertical: 14, fontSize: 16, fontFamily: typography.primaryRegular, color: palette.ink, marginBottom: spacing.lg },
+  timeRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs, marginBottom: spacing.sm },
+  timeInputBlock: { flex: 1 },
+  timeHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  timeHeaderLabel: { color: palette.ink, fontSize: 13, fontFamily: typography.primaryBold, textTransform: 'uppercase', letterSpacing: 0.6 },
+  periodSwitch: { flexDirection: 'row', backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border, borderRadius: 100, padding: 2 },
+  periodBtn: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: 100 },
+  periodBtnActive: { backgroundColor: palette.primary },
+  periodText: { color: palette.muted, fontSize: 11, fontFamily: typography.primaryBold, letterSpacing: 0.4 },
+  periodTextActive: { color: palette.white },
+  timeInput: { marginBottom: 0, textAlign: 'left', textAlignVertical: 'center', color: palette.ink, fontFamily: Platform.OS === 'android' ? 'sans-serif' : 'System', fontSize: 16, backgroundColor: palette.surface, borderColor: 'rgba(31, 31, 31, 0.24)', borderWidth: 1.2, minHeight: 45, paddingVertical: 10 },
+  timeHintText: { color: palette.muted, fontSize: 12, fontFamily: typography.primaryRegular, lineHeight: 16, marginTop: 4, marginBottom: spacing.lg },
+  codeCallout: { backgroundColor: palette.bg, padding: spacing.lg, borderRadius: 8, marginBottom: spacing.xxl },
+  codeCalloutText: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryRegular },
+  codeHighlight: { color: palette.ink, fontFamily: typography.primaryBold },
+  modalFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
+  attachmentBtn: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: palette.border, borderRadius: 100 },
+  attachmentText: { color: palette.ink, fontSize: 13, fontFamily: typography.primaryMedium },
+  actionButtons: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.sm },
+  cancelBtn: { height: 40, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  cancelBtnText: { color: palette.muted, fontSize: 13, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
+  createBtn: { height: 40, minWidth: 92, backgroundColor: palette.primary, paddingHorizontal: spacing.xl, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  createBtnText: { color: palette.white, fontSize: 13, fontFamily: typography.primaryBold, letterSpacing: 0.5 },
 
-  // ── MODAL STYLES ──
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  modalCard: {
-    width: '100%',
-    backgroundColor: palette.white,
-    borderRadius: 16,
-    padding: spacing.xxl,
-    elevation: 24,
-    shadowColor: palette.ink,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  modalTitle: {
-    color: palette.ink,
-    fontSize: 22,
-    fontFamily: typography.primaryBold,
-  },
-  modalSubtitle: {
-    color: palette.muted,
-    fontSize: 14,
-    fontFamily: typography.primaryRegular,
-    lineHeight: 20,
-    marginBottom: spacing.xl,
-  },
-  input: {
-    backgroundColor: palette.white,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 8,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 14,
-    fontSize: 16,
-    fontFamily: typography.primaryRegular,
-    color: palette.ink,
-    marginBottom: spacing.lg,
-  },
-  codeCallout: {
-    backgroundColor: palette.bg,
-    padding: spacing.lg,
-    borderRadius: 8,
-    marginBottom: spacing.xxl,
-  },
-  codeCalloutText: {
-    color: palette.muted,
-    fontSize: 13,
-    fontFamily: typography.primaryRegular,
-  },
-  codeHighlight: {
-    color: palette.ink,
-    fontFamily: typography.primaryBold,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: spacing.md,
-  },
-  attachmentBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: 10, // Slimmed down from 12
-    paddingHorizontal: spacing.md, // Reduced horizontal footprint
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 100,
-  },
-  attachmentText: {
-    color: palette.ink,
-    fontSize: 13, // Scaled down from 14
-    fontFamily: typography.primaryMedium,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md, // Tightened the gap between Cancel and Create
-  },
-  cancelBtn: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs, // Tightened touch target width
-  },
-  cancelBtnText: {
-    color: palette.muted,
-    fontSize: 13, // Scaled down from 14
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.5,
-  },
-  createBtn: {
-    backgroundColor: palette.primary,
-    paddingVertical: 10, // Slimmed down to perfectly match attachmentBtn
-    paddingHorizontal: spacing.xl, // Reduced from xxl to save space
-    borderRadius: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  createBtnText: {
-    color: palette.white,
-    fontSize: 13, // Scaled down from 14
-    fontFamily: typography.primaryBold,
-    letterSpacing: 0.5,
-  },
+  // Custom Alert Styles
+  alertBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  alertCard: { width: '100%', backgroundColor: palette.white, borderRadius: 28, padding: spacing.xxl, alignItems: 'center', elevation: 24, shadowColor: palette.ink, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.15, shadowRadius: 24 },
+  alertIconWrap: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
+  alertTitle: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold, textAlign: 'center', marginBottom: spacing.xs },
+  alertMessage: { color: palette.muted, fontSize: 15, fontFamily: typography.primaryRegular, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xxl },
+  alertGotItBtn: { width: '100%', backgroundColor: palette.primary, paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  alertGotItText: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
+  alertActionRow: { flexDirection: 'row', width: '100%', gap: spacing.md },
+  alertCancelBtn: { flex: 1, backgroundColor: palette.bg, borderWidth: 1, borderColor: palette.border, paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  alertCancelText: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
+  alertConfirmBtn: { flex: 1, backgroundColor: '#DC2626', paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  alertConfirmText: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
 });

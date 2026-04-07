@@ -90,7 +90,10 @@ service cloud.firestore {
     // Classes and attendance domain (starter policy)
     match /classes/{classId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isTeacherOrAdmin();
+      allow create: if isTeacherOrAdmin()
+        || (isSignedIn() && request.resource.data.teacherUid == request.auth.uid);
+      allow update, delete: if isTeacherOrAdmin()
+        || (isSignedIn() && resource.data.teacherUid == request.auth.uid);
 
       match /enrollments/{enrollId} {
         allow read: if isTeacherOrAdmin()
@@ -101,7 +104,20 @@ service cloud.firestore {
 
     match /meetings/{meetingId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isTeacherOrAdmin();
+      allow create: if isTeacherOrAdmin()
+        || (isSignedIn() && request.resource.data.teacherUid == request.auth.uid);
+      allow update, delete: if isTeacherOrAdmin()
+        || (isSignedIn() && resource.data.teacherUid == request.auth.uid);
+
+      match /attendance/{attendanceId} {
+        // Teachers/admins can manage all attendance docs for a meeting.
+        // Students can only read/write their own attendance records.
+        allow read: if isTeacherOrAdmin()
+          || (isSignedIn() && resource.data.studentUid == request.auth.uid);
+        allow create, update: if isTeacherOrAdmin()
+          || (isSignedIn() && request.resource.data.studentUid == request.auth.uid);
+        allow delete: if isTeacherOrAdmin();
+      }
 
       match /checkIns/{uid} {
         // Student can create/update own check-in; teacher/admin can read/manage.
@@ -109,6 +125,30 @@ service cloud.firestore {
         allow create, update: if isOwner(uid) || isTeacherOrAdmin();
         allow delete: if isTeacherOrAdmin();
       }
+    }
+
+    // Root-level enrollment records used by the mobile app.
+    match /enrollments/{enrollId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.teacherUid == request.auth.uid)
+        || (isSignedIn() && resource.data.studentUid == request.auth.uid);
+
+      // Student can submit own enrollment request; teacher/admin can also create records.
+      allow create: if isTeacherOrAdmin()
+        || (isSignedIn() && request.resource.data.teacherUid == request.auth.uid)
+        || (isSignedIn() && request.resource.data.studentUid == request.auth.uid);
+
+      // Teacher/admin manages status; student can update own non-sensitive fields.
+      allow update: if isTeacherOrAdmin()
+        || (isSignedIn() && resource.data.teacherUid == request.auth.uid)
+        || (isSignedIn()
+          && resource.data.studentUid == request.auth.uid
+          && request.resource.data.studentUid == resource.data.studentUid
+          && request.resource.data.teacherUid == resource.data.teacherUid
+          && request.resource.data.classId == resource.data.classId
+          && request.resource.data.status == resource.data.status);
+
+      allow delete: if isTeacherOrAdmin();
     }
   }
 }

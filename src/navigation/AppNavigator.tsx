@@ -5,43 +5,56 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { HomeScreen }    from '../screens/HomeScreen';
-import { ClassScreen }   from '../screens/ClassScreen';
-import { AdminApplicationsScreen } from '../screens/AdminApplicationsScreen';
-import { ProfileScreen } from '../screens/ProfileScreen';
-import { LoginScreen }   from '../screens/LoginScreen';
-import { palette, typography } from '../tokens';
-import { useRole } from '../context/RoleContext';
-import { useAuth } from '../context/AuthContext';
-import { ClassDetailScreen } from '../screens/ClassDetailsScreen';
+import { HomeScreen }               from '../screens/HomeScreen';
+import { ClassScreen }              from '../screens/ClassScreen';
+import { AdminApplicationsScreen }  from '../screens/AdminApplicationsScreen';
+import { ProfileScreen }            from '../screens/ProfileScreen';
+import { LoginScreen }              from '../screens/LoginScreen';
+import { RollCallScreen }           from '../screens/RollCallScreen';
+import { ClassDetailScreen }        from '../screens/ClassDetailsScreen';
+import { palette, typography }      from '../tokens';
+import { useRole }                  from '../context/RoleContext';
+import { useAuth }                  from '../context/AuthContext';
 
-const Tab = createBottomTabNavigator();
-const RootStack = createNativeStackNavigator();
-
-type AppNavigatorProps = {
-  // no props for now; auth is sourced from AuthContext
+// ── Param-list types so navigation.navigate() is fully typed ──
+export type RootStackParamList = {
+  AppTabs: undefined;
+  Login: undefined;
+  ClassDetail: {
+    classId: string;
+    name: string;
+    section: string;
+    code: string;
+  };
+  RollCall: {
+    meetingId: string;
+    classId: string;
+    className: string;
+    section: string;
+    date: string;
+    time: string;
+  };
 };
+
+const Tab       = createBottomTabNavigator();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
-  const { role } = useRole();
+  const { role }   = useRole();
   const { signOut } = useAuth();
 
-  // On Android the gesture nav bar sits below the tab bar.
-  // We pad the tab bar by the bottom inset so it always reaches the screen edge.
-  // On iOS, SafeAreaView handles this automatically when paddingBottom is set.
   const tabBarPaddingBottom = Platform.OS === 'android'
     ? Math.max(insets.bottom, 8)
     : insets.bottom;
 
-  // Total tab bar height = icon + label + top padding + bottom safe area padding
   const TAB_BAR_HEIGHT = 52 + tabBarPaddingBottom;
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: palette.primary,
+        tabBarActiveTintColor:   palette.primary,
         tabBarInactiveTintColor: palette.muted,
         tabBarLabelStyle: {
           fontFamily: typography.primaryRegular,
@@ -50,28 +63,21 @@ function MainTabs() {
         },
         tabBarStyle: {
           backgroundColor: palette.surface,
-          borderTopColor: palette.border,
-          borderTopWidth: 1,
-          // Full-bleed height — reaches the physical bottom of the screen
-          height: TAB_BAR_HEIGHT,
-          paddingBottom: tabBarPaddingBottom,
-          paddingTop: 8,
-          // Extend to the very left/right edges on all devices
-          left: 0,
-          right: 0,
-          position: 'absolute',
+          borderTopColor:  palette.border,
+          borderTopWidth:  1,
+          height:          TAB_BAR_HEIGHT,
+          paddingBottom:   tabBarPaddingBottom,
+          paddingTop:      8,
+          left:            0,
+          right:           0,
+          position:        'absolute',
         },
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: string = 'ellipse-outline';
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Classes') {
-            iconName = focused ? 'school' : 'school-outline';
-          } else if (route.name === 'Applications') {
-            iconName = focused ? 'document-text' : 'document-text-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
-          }
+          let iconName = 'ellipse-outline';
+          if (route.name === 'Home')         iconName = focused ? 'home'          : 'home-outline';
+          else if (route.name === 'Classes') iconName = focused ? 'school'        : 'school-outline';
+          else if (route.name === 'Applications') iconName = focused ? 'document-text' : 'document-text-outline';
+          else if (route.name === 'Profile') iconName = focused ? 'person'        : 'person-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
       })}
@@ -89,25 +95,30 @@ function MainTabs() {
   );
 }
 
-export function AppNavigator({}: AppNavigatorProps) {
+export function AppNavigator({}: {}) {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return null;
-  }
-
-  const isAuthenticated = !!user;
+  if (loading) return null;
 
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
-      {isAuthenticated ? (
-        <RootStack.Group>
-          <RootStack.Screen name="AppTabs">
-            {() => <MainTabs />}
-          </RootStack.Screen>
+      {user ? (
+        <>
+          {/* Main tab shell */}
+          <RootStack.Screen name="AppTabs" component={MainTabs} />
 
-          <RootStack.Screen name="ClassDetail" component={ClassDetailScreen} />
-        </RootStack.Group>
+          {/* Full-screen stack screens — sit above the tab bar, no tab UI visible */}
+          <RootStack.Screen
+            name="RollCall"
+            component={RollCallScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <RootStack.Screen
+            name="ClassDetail"
+            component={ClassDetailScreen}
+            options={{ animation: 'slide_from_right' }}
+          />
+        </>
       ) : (
         <RootStack.Screen name="Login" component={LoginScreen} />
       )}

@@ -116,10 +116,10 @@ export function ClassDetailScreen() {
     const unsubscribe = firestore()
       .collection('enrollments')
       .where('classId', '==', classId)
-      .where('teacherUid', '==', user.uid)
       .onSnapshot(
         snapshot => {
-          const data = snapshot.docs.map(doc => {
+          const data = snapshot.docs
+            .map(doc => {
             const d = doc.data();
             return {
               id:           doc.id,
@@ -130,7 +130,9 @@ export function ClassDetailScreen() {
               absenceCount: d.absenceCount || 0,
               isWarning:    d.isWarning    || false,
             } as EnrolledStudent;
-          });
+          })
+            .filter((student): student is EnrolledStudent => student !== null);
+
           setEnrolledStudents(data);
           setIsLoadingStudents(false);
         },
@@ -211,14 +213,23 @@ export function ClassDetailScreen() {
     ? meetings
     : meetings.filter(m => m.status === 'open');
 
+  const pendingStudentsCount = enrolledStudents.filter(student => student.status === 'pending').length;
+
   const handleStudentAction = async (enrollment: EnrolledStudent, decision: 'approved' | 'rejected') => {
     if (processingStudentId) return;
     setProcessingStudentId(enrollment.id);
     try {
-      await firestore().collection('enrollments').doc(enrollment.id).update({ status: decision, updatedAt: firestore.FieldValue.serverTimestamp() });
+      await firestore().collection('enrollments').doc(enrollment.id).update({
+        status: decision,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      });
     } catch (err) {
       console.error('Failed to update enrollment:', err);
-      Alert.alert('Error', 'Could not update enrollment. Please try again.');
+      const code = (err as { code?: string })?.code;
+      const message = code === 'firestore/permission-denied'
+        ? 'Permission denied while updating enrollment. Ensure your teacher role is approved and Firestore rules are deployed.'
+        : 'Could not update enrollment. Please try again.';
+      Alert.alert('Error', message);
     } finally {
       setProcessingStudentId(null);
     }
@@ -246,6 +257,31 @@ export function ClassDetailScreen() {
         teacherName:    fullName,
         createdAt:      firestore.FieldValue.serverTimestamp(),
       });
+
+      // Auto-populate attendance subcollection with all approved students
+      const enrollSnap = await firestore()
+        .collection('enrollments')
+        .where('classId', '==', classId)
+        .where('status', '==', 'approved')
+        .get();
+
+      const batch = firestore().batch();
+      enrollSnap.docs.forEach(doc => {
+        const d = doc.data();
+        const attRef = firestore()
+          .collection('meetings')
+          .doc(meetingRef.id)
+          .collection('attendance')
+          .doc(d.studentUid);
+        batch.set(attRef, {
+          studentUid: d.studentUid,
+          studentName: d.studentName || 'Unknown Student',
+          status: 'unmarked',
+          checkInTime: null,
+          validation: '',
+        });
+      });
+      await batch.commit();
 
       setShowMeetingModal(false);
 
@@ -297,11 +333,18 @@ export function ClassDetailScreen() {
               onPress={() => setActiveTab(tab)}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name={tab === 'attendance' ? 'time-outline' : tab === 'students' ? 'people-outline' : 'bar-chart-outline'}
-                size={20}
-                color={activeTab === tab ? palette.primary : palette.muted}
-              />
+              <View style={styles.tabIconWrap}>
+                <Ionicons
+                  name={tab === 'attendance' ? 'time-outline' : tab === 'students' ? 'people-outline' : 'bar-chart-outline'}
+                  size={20}
+                  color={activeTab === tab ? palette.primary : palette.muted}
+                />
+                {tab === 'students' && pendingStudentsCount > 0 && (
+                  <View style={styles.tabNotifBadge}>
+                    <Text style={styles.tabNotifText}>{pendingStudentsCount > 9 ? '9+' : String(pendingStudentsCount)}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                 {tab === 'attendance' ? 'ATTENDANCE' : tab === 'students' ? 'STUDENTS' : 'ANALYSIS'}
               </Text>
@@ -554,6 +597,20 @@ const styles = StyleSheet.create({
   tabContainer: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: palette.border, paddingHorizontal: spacing.xl },
   tabButton: { flex: 1, alignItems: 'center', justifyContent: 'flex-start', paddingVertical: spacing.lg, borderBottomWidth: 2, borderBottomColor: 'transparent', gap: spacing.xs },
   tabButtonActive: { borderBottomColor: palette.primary },
+  tabIconWrap: { position: 'relative' },
+  tabNotifBadge: {
+    position: 'absolute',
+    top: -7,
+    right: -12,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: palette.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabNotifText: { color: palette.white, fontSize: 9, fontFamily: typography.primaryBold, lineHeight: 11 },
   tabText: { color: palette.muted, fontSize: 10, fontFamily: typography.primaryBold, letterSpacing: 0.5, textAlign: 'center' },
   tabTextActive: { color: palette.primary },
 

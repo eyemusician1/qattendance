@@ -74,10 +74,12 @@ export function ClassScreen() {
 
   // ── SUBTLE TOAST STATE ──
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastIconName, setToastIconName] = useState<string>('information-circle-outline');
   const toastAnim = React.useRef(new Animated.Value(0)).current;
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, iconName: string = 'information-circle-outline') => {
     setToastMessage(msg);
+    setToastIconName(iconName);
     toastAnim.setValue(0);
     Animated.sequence([
       Animated.timing(toastAnim, {
@@ -178,32 +180,74 @@ export function ClassScreen() {
     if (!user) return;
 
     if (role === 'teacher') {
-      const unsubscribe = firestore()
+      let latestClasses: Array<Pick<TeacherClass, 'id' | 'code' | 'name' | 'section'>> = [];
+      let latestCounts: Record<string, { enrolled: number; pending: number }> = {};
+
+      const syncTeacherClasses = () => {
+        const merged = latestClasses.map(cls => ({
+          ...cls,
+          enrolled: latestCounts[cls.id]?.enrolled ?? 0,
+          pending: latestCounts[cls.id]?.pending ?? 0,
+        }));
+        setTeacherClasses(merged);
+        setIsLoadingClasses(false);
+      };
+
+      const unsubscribeClasses = firestore()
         .collection('classes')
         .where('teacherUid', '==', user.uid)
         .orderBy('createdAt', 'desc')
         .onSnapshot(
           snapshot => {
-            const classesData = snapshot.docs.map(doc => {
+            latestClasses = snapshot.docs.map(doc => {
               const data = doc.data();
               return {
                 id: doc.id,
                 code: data.code || '----',
                 name: data.name || 'Unnamed Class',
                 section: data.section || '---',
-                enrolled: data.enrolledCount || 0,
-                pending: data.pendingCount || 0,
               };
             });
-            setTeacherClasses(classesData);
-            setIsLoadingClasses(false);
+            syncTeacherClasses();
           },
           error => {
             console.error('Failed to load teacher classes:', error);
             setIsLoadingClasses(false);
           }
         );
-      return () => unsubscribe();
+
+      const unsubscribeEnrollments = firestore()
+        .collection('enrollments')
+        .where('teacherUid', '==', user.uid)
+        .onSnapshot(
+          snapshot => {
+            const counts: Record<string, { enrolled: number; pending: number }> = {};
+
+            snapshot.docs.forEach(doc => {
+              const data = doc.data();
+              const classId = data.classId as string | undefined;
+              const status = data.status as string | undefined;
+              if (!classId) return;
+
+              if (!counts[classId]) counts[classId] = { enrolled: 0, pending: 0 };
+
+              if (status === 'approved') counts[classId].enrolled += 1;
+              if (status === 'pending') counts[classId].pending += 1;
+            });
+
+            latestCounts = counts;
+            syncTeacherClasses();
+          },
+          error => {
+            console.error('Failed to load enrollment counts:', error);
+            setIsLoadingClasses(false);
+          }
+        );
+
+      return () => {
+        unsubscribeClasses();
+        unsubscribeEnrollments();
+      };
     }
 
     if (role === 'student') {
@@ -259,6 +303,17 @@ export function ClassScreen() {
 
       const classDoc = classQuery.docs[0];
       const classData = classDoc.data();
+      const teacherUid = (classData.teacherUid || classData.teacherId || '').trim?.() || classData.teacherUid || classData.teacherId;
+
+      if (!teacherUid || typeof teacherUid !== 'string') {
+        setAlertModal({
+          visible: true,
+          title: 'Class Misconfigured',
+          message: 'This class is missing a teacher link. Please contact your instructor.',
+          type: 'error'
+        });
+        return;
+      }
 
       const enrollQuery = await firestore()
         .collection('enrollments')
@@ -280,7 +335,7 @@ export function ClassScreen() {
         studentUid: user.uid,
         studentName: fullName,
         studentEmail: user.email,
-        teacherUid: classData.teacherUid,
+        teacherUid,
         status: 'pending',
         absenceCount: 0,
         isWarning: false,
@@ -288,13 +343,9 @@ export function ClassScreen() {
         createdAt: firestore.FieldValue.serverTimestamp()
       });
 
-      await firestore().collection('classes').doc(classDoc.id).update({
-        pendingCount: firestore.FieldValue.increment(1)
-      });
-
       setShowJoinModal(false);
       setJoinClassCode('');
-      showToast(`Request sent to join ${classData.code}`);
+      showToast(`Join request pending for ${classData.code}. Waiting for teacher approval.`, 'time-outline');
 
     } catch (error) {
       console.error('Failed to join class:', error);
@@ -346,8 +397,6 @@ export function ClassScreen() {
         code: generatedCode,
         teacherUid: user.uid,
         teacherName: fullName,
-        enrolledCount: 0,
-        pendingCount: 0,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
 
@@ -485,7 +534,7 @@ export function ClassScreen() {
                 </View>
                 <View style={styles.cardBody}>
                   <Text style={styles.className}>{cls.name}</Text>
-                  <Text style={styles.classSchedule}>Manage Roster & Attendance</Text>
+                  <Text style={styles.classSchedule}>Manage Students & Attendance</Text>
                 </View>
                 <View style={styles.classCardFooter}>
                   <View style={styles.pillRow}>
@@ -636,7 +685,7 @@ export function ClassScreen() {
           ]}
           pointerEvents="none"
         >
-          <Ionicons name="trash-bin-outline" size={16} color={palette.white} />
+          <Ionicons name={toastIconName} size={16} color={palette.white} />
           <Text style={styles.toastText}>{toastMessage}</Text>
         </Animated.View>
       )}

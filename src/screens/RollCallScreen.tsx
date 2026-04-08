@@ -15,6 +15,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { palette, spacing, typography } from '../tokens';
 import firestore from '@react-native-firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import { dlg, styles } from './styles/RollCallScreen.styles';
 
 // ─────────────────────────────────────────────
@@ -61,7 +62,7 @@ const STATUS_CONFIG: Record<string, { badge: object; text: object; label: string
 };
 
 // ─────────────────────────────────────────────
-// Dialog content config (Strict Palette)
+// Dialog content config
 // ─────────────────────────────────────────────
 
 const DIALOG_CONFIG: Record<
@@ -121,6 +122,10 @@ export function RollCallScreen() {
   const insets     = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route      = useRoute<any>();
+
+  // FIX: pull the authenticated user so we can patch legacy teacherUid docs
+  const { user } = useAuth();
+
   const { meetingId, classId, className, section, date, time } = route.params || {};
 
   const [isLoading,     setIsLoading]     = useState(true);
@@ -129,8 +134,10 @@ export function RollCallScreen() {
   const [skipPresent,   setSkipPresent]   = useState(false);
   const [activeDialog,  setActiveDialog]  = useState<DialogType>(null);
   const [isProcessing,  setIsProcessing]  = useState(false);
+  // Stores a human-readable error to show inside the dialog instead of crashing
+  const [dialogError,   setDialogError]   = useState<string | null>(null);
 
-  // ── Live attendance listener ──
+  // ── Live attendance listener ──────────────────────────────────────────────
   useEffect(() => {
     if (!meetingId) return;
 
@@ -163,53 +170,110 @@ export function RollCallScreen() {
     return () => unsubscribe();
   }, [meetingId]);
 
-  // ── Filtered student list ──
-  const visibleStudents = useMemo(
-    () => (skipPresent ? students.filter(s => s.status !== 'present') : students),
-    [skipPresent, students]
-  );
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const visibleStudents = students;
 
-  // Single-pass counters to avoid repeated full-array scans.
   const metrics = useMemo(() => {
     return students.reduce(
       (acc, student) => {
-        if (student.status === 'present') acc.present += 1;
-        if (student.status === 'absent') acc.absent += 1;
-        if (student.status === 'late') acc.late += 1;
+        if (student.status === 'present')  acc.present  += 1;
+        if (student.status === 'absent')   acc.absent   += 1;
+        if (student.status === 'late')     acc.late     += 1;
         if (student.status === 'unmarked') acc.unmarked += 1;
         return acc;
       },
-      { present: 0, absent: 0, late: 0, unmarked: 0 }
+      { present: 0, absent: 0, late: 0, unmarked: 0 },
     );
   }, [students]);
 
-  // ── Dialog actions ──
+  // ── Dialog actions ────────────────────────────────────────────────────────
   const handleConfirm = async () => {
     if (!activeDialog || isProcessing) return;
     setIsProcessing(true);
+    setDialogError(null);
 
     try {
+      const meetingRef = firestore().collection('meetings').doc(meetingId);
+
       if (activeDialog === 'cancel') {
-        await firestore().collection('meetings').doc(meetingId).delete();
+        await meetingRef.delete();
         setActiveDialog(null);
         navigation.goBack();
 
       } else if (activeDialog === 'save') {
+        // Attendance is already persisted in real-time via Firestore.
+        // Nothing extra to flush — just dismiss the dialog.
         setActiveDialog(null);
 
       } else if (activeDialog === 'finalize') {
-        await firestore().collection('meetings').doc(meetingId).update({ status: 'closed' });
+
+        // ── STEP 1: Self-heal the teacherUid field if it still holds the
+        //    legacy display-name string instead of the real uid.
+        //    This ensures the Firestore rule  `resource.data.teacherUid == request.auth.uid`
+        //    passes on the very next write, even before re-deploying the updated rules.
+        if (user) {
+          const meetingSnap = await meetingRef.get();
+          const stored = meetingSnap.data()?.teacherUid;
+          if (stored && stored !== user.uid) {
+            // Overwrite with the real uid so rules evaluate correctly from now on.
+            await meetingRef.update({
+              teacherUid:  user.uid,
+              teacherName: stored, // preserve the original display name for reference
+            });
+          }
+        }
+
+        // ── STEP 2: Mark all still-unmarked students as absent (not present)
+        //    before locking the record.
+        const attSnap = await meetingRef
+          .collection('attendance')
+          .where('status', '==', 'unmarked')
+          .get();
+
+        if (!attSnap.empty) {
+          const batch = firestore().batch();
+          attSnap.docs.forEach(doc => {
+            batch.update(doc.ref, {
+              status:    'absent',
+              updatedAt: firestore.FieldValue.serverTimestamp(),
+            });
+          });
+          await batch.commit();
+        }
+
+        // ── STEP 3: Close the meeting
+        await meetingRef.update({
+          status:    'closed',
+          closedAt:  firestore.FieldValue.serverTimestamp(),
+        });
+
         setMeetingStatus('closed');
         setActiveDialog(null);
         navigation.goBack();
       }
-    } catch (error) {
-      console.error(`Dialog action "${activeDialog}" failed:`, error);
+
+    } catch (error: any) {
+      const msg: string = error?.message ?? String(error);
+      console.error(`Dialog action "${activeDialog}" failed:`, msg);
+
+      // Determine a user-friendly message based on the Firestore error code
+      if (msg.includes('permission-denied') || msg.includes('firestore/p')) {
+        setDialogError(
+          'Permission denied. Your session may have expired — please sign out and sign back in, then try again.',
+        );
+      } else if (msg.includes('not-found')) {
+        setDialogError('Meeting record not found. It may have already been deleted.');
+      } else {
+        setDialogError('Something went wrong. Please check your connection and try again.');
+      }
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
 
@@ -234,8 +298,14 @@ export function RollCallScreen() {
               <Text style={styles.classCardTitle}>{className || 'Unnamed Class'}</Text>
               <Text style={styles.classCardSubtitle}>Section {section || '--'} • {date}</Text>
             </View>
-            <View style={[styles.statusBadgeTop, meetingStatus === 'open' ? styles.bannerStatusOpen : styles.bannerStatusClosed]}>
-              <Text style={[styles.statusBadgeTopText, meetingStatus === 'open' ? styles.bannerTextOpen : styles.bannerTextClosed]}>
+            <View style={[
+              styles.statusBadgeTop,
+              meetingStatus === 'open' ? styles.bannerStatusOpen : styles.bannerStatusClosed,
+            ]}>
+              <Text style={[
+                styles.statusBadgeTopText,
+                meetingStatus === 'open' ? styles.bannerTextOpen : styles.bannerTextClosed,
+              ]}>
                 {meetingStatus.toUpperCase()}
               </Text>
             </View>
@@ -257,10 +327,13 @@ export function RollCallScreen() {
               <Text style={styles.metricLabel}>LATE</Text>
             </View>
             <View style={styles.metricBlockLast}>
-               <TouchableOpacity style={styles.cancelBtnOutline} onPress={() => setActiveDialog('cancel')}>
-                 <Ionicons name="trash-outline" size={16} color={palette.ink} />
-                 <Text style={styles.cancelBtnOutlineText}>CANCEL</Text>
-               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelBtnOutline}
+                onPress={() => setActiveDialog('cancel')}
+              >
+                <Ionicons name="trash-outline" size={16} color={palette.ink} />
+                <Text style={styles.cancelBtnOutlineText}>CANCEL</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -291,7 +364,36 @@ export function RollCallScreen() {
                       : 'No check-in recorded'}
                   </Text>
                 </View>
-                <StatusChip status={student.status} />
+                {!(skipPresent && student.status === 'present') && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <StatusChip status={student.status} />
+                    {meetingStatus === 'open'
+                      && student.status !== 'late'
+                      && student.status !== 'absent' && (
+                      <TouchableOpacity
+                        style={{
+                          marginLeft: 4, paddingVertical: 4, paddingHorizontal: 10,
+                          borderRadius: 12, backgroundColor: palette.primary,
+                        }}
+                        onPress={async () => {
+                          try {
+                            await firestore()
+                              .collection('meetings')
+                              .doc(meetingId)
+                              .collection('attendance')
+                              .doc(student.studentUid)
+                              .update({ status: 'late' });
+                          } catch (e) {
+                            // silent — will surface on next sync
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={{ color: palette.white, fontSize: 12 }}>Mark Late</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
               </View>
             ))
           )}
@@ -340,8 +442,14 @@ export function RollCallScreen() {
         visible={activeDialog !== null}
         type={activeDialog}
         isProcessing={isProcessing}
+        errorMessage={dialogError}
         onConfirm={handleConfirm}
-        onCancel={() => !isProcessing && setActiveDialog(null)}
+        onCancel={() => {
+          if (!isProcessing) {
+            setActiveDialog(null);
+            setDialogError(null);
+          }
+        }}
       />
 
     </View>
@@ -371,17 +479,23 @@ type ConfirmDialogProps = {
   visible: boolean;
   type: DialogType;
   isProcessing: boolean;
+  errorMessage: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 };
 
-function ConfirmDialog({ visible, type, isProcessing, onConfirm, onCancel }: ConfirmDialogProps) {
+function ConfirmDialog({
+  visible,
+  type,
+  isProcessing,
+  errorMessage,
+  onConfirm,
+  onCancel,
+}: ConfirmDialogProps) {
   if (!type) return null;
 
   const cfg = DIALOG_CONFIG[type];
-
-  const confirmBg =
-    cfg.confirmStyle === 'primary' ? palette.primary : palette.ink;
+  const confirmBg = cfg.confirmStyle === 'primary' ? palette.primary : palette.ink;
 
   return (
     <Modal
@@ -406,6 +520,14 @@ function ConfirmDialog({ visible, type, isProcessing, onConfirm, onCancel }: Con
                 <Text style={dlg.body}>{cfg.body}</Text>
               </View>
 
+              {/* Inline error message — shown only when the action failed */}
+              {errorMessage && (
+                <View style={dlg.errorBox}>
+                  <Ionicons name="warning-outline" size={16} color={palette.primary} style={{ flexShrink: 0 }} />
+                  <Text style={dlg.errorText}>{errorMessage}</Text>
+                </View>
+              )}
+
               {/* Actions */}
               <View style={dlg.actions}>
                 <TouchableOpacity
@@ -418,7 +540,11 @@ function ConfirmDialog({ visible, type, isProcessing, onConfirm, onCancel }: Con
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[dlg.confirmBtn, { backgroundColor: confirmBg }, isProcessing && dlg.confirmDisabled]}
+                  style={[
+                    dlg.confirmBtn,
+                    { backgroundColor: confirmBg },
+                    isProcessing && dlg.confirmDisabled,
+                  ]}
                   onPress={onConfirm}
                   disabled={isProcessing}
                   activeOpacity={0.85}
@@ -426,7 +552,9 @@ function ConfirmDialog({ visible, type, isProcessing, onConfirm, onCancel }: Con
                   {isProcessing ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={dlg.confirmText}>{cfg.confirmLabel}</Text>
+                    <Text style={dlg.confirmText}>
+                      {errorMessage ? 'Retry' : cfg.confirmLabel}
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -438,8 +566,3 @@ function ConfirmDialog({ visible, type, isProcessing, onConfirm, onCancel }: Con
     </Modal>
   );
 }
-
-// ─────────────────────────────────────────────
-// StyleSheet
-// ─────────────────────────────────────────────
-

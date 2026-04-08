@@ -38,16 +38,39 @@ service cloud.firestore {
       );
     }
 
-    // Default deny-all. Open only explicit collections below.
+    function classTeacherUid(classId) {
+      return classId is string
+        && exists(/databases/$(database)/documents/classes/$(classId))
+        ? get(/databases/$(database)/documents/classes/$(classId)).data.teacherUid
+        : null;
+    }
+
+    function ownsClass(classId) {
+      return isSignedIn() && classTeacherUid(classId) == request.auth.uid;
+    }
+
+    // Helper that resolves ownership of a meeting document.
+    function ownsThisMeeting(meetingId) {
+      let mtg = get(/databases/$(database)/documents/meetings/$(meetingId));
+      return isSignedIn()
+        && mtg.exists()
+        && (
+          // Modern documents: teacherUid stores the actual Firebase uid
+          mtg.data.teacherUid == request.auth.uid
+          // Legacy documents: teacherUid stores the display name — fall back
+          || (mtg.data.classId is string && ownsClass(mtg.data.classId))
+        );
+    }
+
+    // Default deny-all.
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // User profiles
+    // ── User profiles ────────────────────────────────────────────────────────
     match /users/{uid} {
       allow read: if isOwner(uid) || isAdmin();
 
-      // First login bootstrap: user creates own profile as student only.
       allow create: if isOwner(uid)
         && request.resource.data.uid == uid
         && request.resource.data.email is string
@@ -55,43 +78,37 @@ service cloud.firestore {
         && request.resource.data.role == 'student'
         && request.resource.data.status == 'active';
 
-      // Users can only update profile fields (not role/approval/security fields).
       allow update: if isOwner(uid)
         && validFullName(request.resource.data.fullName)
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.email == resource.data.email
         && !request.resource.data.diff(resource.data).changedKeys().hasAny([
-          'role',
-          'status',
-          'approvedBy',
-          'approvedAt',
-          'isAdmin'
+          'role', 'status', 'approvedBy', 'approvedAt', 'isAdmin'
         ]);
 
-      // Admin can manage roles/status.
       allow update, delete: if isAdmin();
     }
 
-    // Role applications (teacher/admin requests)
+    // ── Role applications ────────────────────────────────────────────────────
     match /roleApplications/{appId} {
       allow create: if isSignedIn()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.requestedRole in ['teacher', 'admin']
         && request.resource.data.status == 'pending';
 
-      allow read: if isAdmin() || (
-        isSignedIn() && resource.data.ownerUid == request.auth.uid
-      );
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
 
-      // Only admin approves/rejects.
       allow update, delete: if isAdmin();
     }
 
-    // Classes and attendance domain (starter policy)
+    // ── Classes ──────────────────────────────────────────────────────────────
     match /classes/{classId} {
       allow read: if isSignedIn();
+
       allow create: if isTeacherOrAdmin()
         || (isSignedIn() && request.resource.data.teacherUid == request.auth.uid);
+
       allow update, delete: if isTeacherOrAdmin()
         || (isSignedIn() && resource.data.teacherUid == request.auth.uid);
 
@@ -102,45 +119,57 @@ service cloud.firestore {
       }
     }
 
+    // ── Meetings ─────────────────────────────────────────────────────────────
     match /meetings/{meetingId} {
       allow read: if isSignedIn();
+
       allow create: if isTeacherOrAdmin()
         || (isSignedIn() && request.resource.data.teacherUid == request.auth.uid);
-      allow update, delete: if isTeacherOrAdmin()
-        || (isSignedIn() && resource.data.teacherUid == request.auth.uid);
 
+      allow update, delete: if isTeacherOrAdmin()
+        || (isSignedIn() && resource.data.teacherUid == request.auth.uid)
+        || (isSignedIn() && ownsClass(resource.data.classId));
+
+      // ── Attendance sub-collection ─────────────────────────────────────────
       match /attendance/{attendanceId} {
-        // Teachers/admins can manage all attendance docs for a meeting.
-        // Students can only read/write their own attendance records.
         allow read: if isTeacherOrAdmin()
           || (isSignedIn() && resource.data.studentUid == request.auth.uid);
+
         allow create, update: if isTeacherOrAdmin()
+          || ownsThisMeeting(meetingId)
+          || (isSignedIn() && resource.data.studentUid == request.auth.uid)
           || (isSignedIn() && request.resource.data.studentUid == request.auth.uid);
-        allow delete: if isTeacherOrAdmin();
+
+        allow delete: if isTeacherOrAdmin()
+          || ownsThisMeeting(meetingId);
       }
 
+      // ── Check-ins sub-collection ──────────────────────────────────────────
       match /checkIns/{uid} {
-        // Student can create/update own check-in; teacher/admin can read/manage.
         allow read: if isTeacherOrAdmin() || isOwner(uid);
         allow create, update: if isOwner(uid) || isTeacherOrAdmin();
         allow delete: if isTeacherOrAdmin();
       }
     }
 
-    // Root-level enrollment records used by the mobile app.
+    // ── Root-level enrollments ────────────────────────────────────────────────
     match /enrollments/{enrollId} {
       allow read: if isAdmin()
         || (isSignedIn() && resource.data.teacherUid == request.auth.uid)
+        || (isSignedIn() && ownsClass(resource.data.classId))
         || (isSignedIn() && resource.data.studentUid == request.auth.uid);
 
-      // Student can submit own enrollment request; teacher/admin can also create records.
       allow create: if isTeacherOrAdmin()
         || (isSignedIn() && request.resource.data.teacherUid == request.auth.uid)
-        || (isSignedIn() && request.resource.data.studentUid == request.auth.uid);
+        || (isSignedIn()
+          && request.resource.data.studentUid == request.auth.uid
+          && request.resource.data.classId is string
+          && classTeacherUid(request.resource.data.classId) != null
+          && request.resource.data.teacherUid == classTeacherUid(request.resource.data.classId));
 
-      // Teacher/admin manages status; student can update own non-sensitive fields.
       allow update: if isTeacherOrAdmin()
         || (isSignedIn() && resource.data.teacherUid == request.auth.uid)
+        || (isSignedIn() && ownsClass(resource.data.classId))
         || (isSignedIn()
           && resource.data.studentUid == request.auth.uid
           && request.resource.data.studentUid == resource.data.studentUid
@@ -148,7 +177,10 @@ service cloud.firestore {
           && request.resource.data.classId == resource.data.classId
           && request.resource.data.status == resource.data.status);
 
-      allow delete: if isTeacherOrAdmin();
+      // ── THIS IS THE FIX ──
+      allow delete: if isTeacherOrAdmin()
+        || (isSignedIn() && resource.data.teacherUid == request.auth.uid)
+        || (isSignedIn() && ownsClass(resource.data.classId));
     }
   }
 }

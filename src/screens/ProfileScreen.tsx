@@ -9,7 +9,6 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Image,
-  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -84,132 +83,130 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
 
+      {/* ── HEADER WITH GOOGLE DRIVE STYLE AVATAR ── */}
       <View style={styles.header}>
         <Text style={styles.pageTitle}>Profile</Text>
+        <View style={styles.avatarWrap}>
+          {user?.photoURL ? (
+            <Image source={{ uri: user.photoURL }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarText}>{initial}</Text>
+          )}
+        </View>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View>
-          {/* ── HERO IDENTITY SECTION ── */}
-          <View style={styles.heroSection}>
-            <View style={styles.avatarWrap}>
-              {user?.photoURL ? (
-                <Image source={{ uri: user.photoURL }} style={styles.avatarImage} />
-              ) : (
-                <Text style={styles.avatarText}>{initial}</Text>
-              )}
-            </View>
-            <Text style={styles.userName} numberOfLines={1}>{fullName || 'Unknown User'}</Text>
-            <View style={styles.roleChip}>
-              <Text style={styles.roleChipText}>{role.toUpperCase()}</Text>
-            </View>
-          </View>
+      {/* ── FIXED CONTENT (NO SCROLLING) ── */}
+      <View style={styles.fixedContent}>
 
-          {/* ── DYNAMIC ROLE-BASED STATS BENTO ── */}
-          {role === 'admin' ? (
-            <View style={styles.bentoRow}>
-              <View style={styles.bentoSquare}>
-                <View style={styles.bentoIconWrap}>
-                  <Ionicons name="server-outline" size={24} color={palette.ink} />
-                </View>
-                <View>
-                  <Text style={styles.statValueText}>Good</Text>
-                  <Text style={styles.statLabel}>System Health</Text>
-                </View>
-              </View>
-              <View style={styles.bentoSquare}>
-                <View style={styles.bentoIconWrap}>
-                  <Ionicons name="shield-checkmark-outline" size={24} color={palette.ink} />
-                </View>
-                <View>
-                  <Text style={styles.statValueText}>Master</Text>
-                  <Text style={styles.statLabel}>Access Level</Text>
-                </View>
-              </View>
-            </View>
-          ) : role === 'teacher' ? (
-            <View style={styles.bentoRow}>
-              <View style={styles.bentoSquare}>
-                <View style={styles.bentoIconWrap}>
-                  <Ionicons name="book-outline" size={24} color={palette.ink} />
-                </View>
-                <View>
-                  <Text style={styles.statValue}>{teacherStats.activeClasses}</Text>
-                  <Text style={styles.statLabel}>Active Classes</Text>
-                </View>
-              </View>
-              <View style={styles.bentoSquare}>
-                <View style={styles.bentoIconWrap}>
-                  <Ionicons name="people-outline" size={24} color={palette.ink} />
-                </View>
-                <View>
-                  <Text style={styles.statValue}>{teacherStats.totalStudents}</Text>
-                  <Text style={styles.statLabel}>Total Students</Text>
-                </View>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.bentoRow}>
-              <View style={styles.bentoSquare}>
-                <View style={styles.bentoIconWrap}>
-                  <Ionicons name="book-outline" size={24} color={palette.ink} />
-                </View>
-                <View>
-                  <Text style={styles.statValue}>{studentStats.enrolledClasses}</Text>
-                  <Text style={styles.statLabel}>Enrolled Classes</Text>
-                </View>
-              </View>
-              <View style={styles.bentoSquare}>
-                <View style={styles.bentoIconWrap}>
-                  <Ionicons name="time-outline" size={24} color={palette.ink} />
-                </View>
-                <View>
-                  <Text style={styles.statValue}>{studentStats.pendingRequests}</Text>
-                  <Text style={styles.statLabel}>Pending Requests</Text>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* ── PREFERENCES LIST ── */}
-          <Text style={styles.sectionLabel}>PREFERENCES</Text>
-          <View style={styles.settingsCard}>
-            <View style={styles.settingRow}>
-              <View style={styles.settingRowLeft}>
-                <View style={styles.settingIconWrap}>
-                  <Ionicons name="notifications-outline" size={20} color={palette.ink} />
-                </View>
-                <Text style={styles.settingText}>Push Notifications</Text>
-              </View>
-              <Switch
-                value={notificationsEnabled}
-                onValueChange={setNotificationsEnabled}
-                trackColor={{ false: palette.border, true: palette.primary }}
-                thumbColor={palette.white}
-              />
-            </View>
-
-            <View style={styles.settingDivider} />
-
-            <TouchableOpacity style={styles.settingRow} activeOpacity={0.7}>
-              <View style={styles.settingRowLeft}>
-                <View style={styles.settingIconWrap}>
-                  <Ionicons name="help-circle-outline" size={20} color={palette.ink} />
-                </View>
-                <Text style={styles.settingText}>Help & Support</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={palette.muted} />
-            </TouchableOpacity>
+        {/* Identity Row */}
+        <View style={styles.identityRow}>
+          <Text style={styles.userName} numberOfLines={1}>{fullName || 'Unknown User'}</Text>
+          <View style={styles.roleChip}>
+            <Text style={styles.roleChipText}>{role.toUpperCase()}</Text>
           </View>
         </View>
 
-        {/* Spacer forces the Sign Out button to the bottom if screen is tall */}
-        <View style={{ flex: 1, minHeight: spacing.xxxl }} />
+        {/* ── DYNAMIC ROLE-BASED STATS BENTO ── */}
+        {role === 'admin' ? (
+          <View style={styles.bentoRow}>
+            <View style={styles.bentoSquare}>
+              <View style={styles.bentoIconWrap}>
+                <Ionicons name="server-outline" size={20} color={palette.ink} />
+              </View>
+              <View>
+                <Text style={styles.statValueText}>Good</Text>
+                <Text style={styles.statLabel}>System Health</Text>
+              </View>
+            </View>
+            <View style={styles.bentoSquare}>
+              <View style={styles.bentoIconWrap}>
+                <Ionicons name="shield-checkmark-outline" size={20} color={palette.ink} />
+              </View>
+              <View>
+                <Text style={styles.statValueText}>Master</Text>
+                <Text style={styles.statLabel}>Access Level</Text>
+              </View>
+            </View>
+          </View>
+        ) : role === 'teacher' ? (
+          <View style={styles.bentoRow}>
+            <View style={styles.bentoSquare}>
+              <View style={styles.bentoIconWrap}>
+                <Ionicons name="book-outline" size={20} color={palette.ink} />
+              </View>
+              <View>
+                <Text style={styles.statValue}>{teacherStats.activeClasses}</Text>
+                <Text style={styles.statLabel}>Active Classes</Text>
+              </View>
+            </View>
+            <View style={styles.bentoSquare}>
+              <View style={styles.bentoIconWrap}>
+                <Ionicons name="people-outline" size={20} color={palette.ink} />
+              </View>
+              <View>
+                <Text style={styles.statValue}>{teacherStats.totalStudents}</Text>
+                <Text style={styles.statLabel}>Total Students</Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.bentoRow}>
+            <View style={styles.bentoSquare}>
+              <View style={styles.bentoIconWrap}>
+                <Ionicons name="book-outline" size={20} color={palette.ink} />
+              </View>
+              <View>
+                <Text style={styles.statValue}>{studentStats.enrolledClasses}</Text>
+                <Text style={styles.statLabel}>Enrolled Classes</Text>
+              </View>
+            </View>
+            <View style={styles.bentoSquare}>
+              <View style={styles.bentoIconWrap}>
+                <Ionicons name="time-outline" size={20} color={palette.ink} />
+              </View>
+              <View>
+                <Text style={styles.statValue}>{studentStats.pendingRequests}</Text>
+                <Text style={styles.statLabel}>Pending Requests</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
-        {/* ── SIGN OUT BUTTON (Anchored to bottom) ── */}
+        {/* ── PREFERENCES LIST ── */}
+        <Text style={styles.sectionLabel}>PREFERENCES</Text>
+        <View style={styles.settingsCard}>
+          <View style={styles.settingRow}>
+            <View style={styles.settingRowLeft}>
+              <View style={styles.settingIconWrap}>
+                <Ionicons name="notifications-outline" size={18} color={palette.ink} />
+              </View>
+              <Text style={styles.settingText}>Push Notifications</Text>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={setNotificationsEnabled}
+              trackColor={{ false: palette.border, true: palette.primary }}
+              thumbColor={palette.white}
+            />
+          </View>
+
+          <View style={styles.settingDivider} />
+
+          <TouchableOpacity style={styles.settingRow} activeOpacity={0.7}>
+            <View style={styles.settingRowLeft}>
+              <View style={styles.settingIconWrap}>
+                <Ionicons name="help-circle-outline" size={18} color={palette.ink} />
+              </View>
+              <Text style={styles.settingText}>Help & Support</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={palette.muted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Flexible spacer dynamically pushes the Sign Out button to the bottom */}
+        <View style={styles.spacer} />
+
+        {/* ── SIGN OUT BUTTON ── */}
         <TouchableOpacity
           style={styles.signOutBtn}
           activeOpacity={0.7}
@@ -219,7 +216,7 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
-      </ScrollView>
+      </View>
 
       {/* ── LOGOUT CONFIRMATION MODAL ── */}
       <Modal visible={showLogoutModal} transparent animationType="fade" onRequestClose={() => setShowLogoutModal(false)}>
@@ -272,40 +269,32 @@ const styles = StyleSheet.create({
     backgroundColor: palette.bg,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   pageTitle: {
     color: palette.ink,
     fontSize: 42,
     fontFamily: typography.primaryBold,
   },
-  // flexGrow: 1 ensures it stretches to full height, paddingBottom clears the tab bar
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.xl,
-    paddingBottom: 110,
-  },
 
-  // ── HERO IDENTITY ──
-  heroSection: {
-    alignItems: 'center',
-    marginBottom: spacing.xxxl,
-  },
+  // ── GOOGLE DRIVE STYLE AVATAR ──
   avatarWrap: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: palette.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.md,
-    elevation: 8,
+    elevation: 4,
     shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
     overflow: 'hidden',
   },
   avatarImage: {
@@ -315,19 +304,36 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     color: palette.white,
-    fontSize: 36,
+    fontSize: 22,
     fontFamily: typography.primaryBold,
   },
+
+  // ── FIXED DIMENSIONS (No Scrolling) ──
+  fixedContent: {
+    flex: 1,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 110, // Safely clears the bottom tabs
+  },
+  spacer: {
+    flex: 1, // Devours all empty space and forces elements apart
+  },
+
+  // ── IDENTITY ROW ──
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xxxl,
+  },
   userName: {
+    flexShrink: 1,
     color: palette.ink,
     fontSize: 24,
     fontFamily: typography.primaryBold,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
   },
   roleChip: {
     backgroundColor: palette.white,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: 4,
     borderRadius: 100,
     borderWidth: 1,
@@ -354,7 +360,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
     justifyContent: 'space-between',
-    minHeight: 120,
+    minHeight: 115,
     elevation: 2,
     shadowColor: palette.ink,
     shadowOffset: { width: 0, height: 4 },
@@ -362,19 +368,19 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
   },
   bentoIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: palette.bg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: palette.border,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   statValue: {
     color: palette.ink,
-    fontSize: 28,
+    fontSize: 26,
     fontFamily: typography.primaryBold,
   },
   statValueText: {
@@ -418,9 +424,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   settingIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: palette.bg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -433,7 +439,7 @@ const styles = StyleSheet.create({
   settingDivider: {
     height: 1,
     backgroundColor: palette.border,
-    marginLeft: 68,
+    marginLeft: 66,
   },
 
   // ── SIGN OUT BTN ──

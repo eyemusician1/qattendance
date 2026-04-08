@@ -304,4 +304,23 @@ export const dlg = StyleSheet.create({
     fontFamily: typography.primaryBold,
     letterSpacing: 0.5,
   },
+  errorBox: {
+  flexDirection: 'row',
+  alignItems: 'flex-start',
+  gap: 8,
+  width: '100%',
+  backgroundColor: '#FEF2F2',
+  borderWidth: 1,
+  borderColor: '#FECACA',
+  borderRadius: 12,
+  paddingHorizontal: 14,
+  paddingVertical: 10,
+},
+errorText: {
+  flex: 1,
+  color: palette.primary,
+  fontSize: 13,
+  fontFamily: typography.primaryRegular,
+  lineHeight: 18,
+},
 });

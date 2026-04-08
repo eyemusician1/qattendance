@@ -122,8 +122,6 @@ export function RollCallScreen() {
   const insets     = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route      = useRoute<any>();
-
-  // FIX: pull the authenticated user so we can patch legacy teacherUid docs
   const { user } = useAuth();
 
   const { meetingId, classId, className, section, date, time } = route.params || {};
@@ -134,7 +132,6 @@ export function RollCallScreen() {
   const [skipPresent,   setSkipPresent]   = useState(false);
   const [activeDialog,  setActiveDialog]  = useState<DialogType>(null);
   const [isProcessing,  setIsProcessing]  = useState(false);
-  // Stores a human-readable error to show inside the dialog instead of crashing
   const [dialogError,   setDialogError]   = useState<string | null>(null);
 
   // ── Live attendance listener ──────────────────────────────────────────────
@@ -158,6 +155,9 @@ export function RollCallScreen() {
               validation:  data.validation  || '--',
             } as StudentAttendance;
           });
+
+          // Sort alphabetically by student name
+          attendanceData.sort((a, b) => a.studentName.localeCompare(b.studentName));
           setStudents(attendanceData);
           setIsLoading(false);
         },
@@ -171,7 +171,9 @@ export function RollCallScreen() {
   }, [meetingId]);
 
   // ── Derived data ──────────────────────────────────────────────────────────
-  const visibleStudents = students;
+  const visibleStudents = skipPresent
+    ? students.filter(s => s.status !== 'present')
+    : students;
 
   const metrics = useMemo(() => {
     return students.reduce(
@@ -185,6 +187,53 @@ export function RollCallScreen() {
       { present: 0, absent: 0, late: 0, unmarked: 0 },
     );
   }, [students]);
+
+  // ── Status Toggle Action ──────────────────────────────────────────────────
+  const handleToggleStatus = async (student: StudentAttendance) => {
+    if (meetingStatus !== 'open') return;
+
+    const isPresent = student.status === 'present';
+    const newStatus = isPresent ? 'unmarked' : 'present';
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+    try {
+      await firestore()
+        .collection('meetings')
+        .doc(meetingId)
+        .collection('attendance')
+        .doc(student.id)
+        .update({
+          status: newStatus,
+          checkInTime: isPresent ? null : timeStr,
+          updatedAt: firestore.FieldValue.serverTimestamp(),
+        });
+    } catch (error) {
+      console.warn('Failed to update attendance:', error);
+    }
+  };
+
+  const handleMarkLate = async (student: StudentAttendance) => {
+    if (meetingStatus !== 'open') return;
+
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+    try {
+      await firestore()
+        .collection('meetings')
+        .doc(meetingId)
+        .collection('attendance')
+        .doc(student.id)
+        .update({
+          status: 'late',
+          checkInTime: timeStr,
+          updatedAt: firestore.FieldValue.serverTimestamp()
+        });
+    } catch (e) {
+      console.warn('Failed to mark late:', e);
+    }
+  };
 
   // ── Dialog actions ────────────────────────────────────────────────────────
   const handleConfirm = async () => {
@@ -201,30 +250,20 @@ export function RollCallScreen() {
         navigation.goBack();
 
       } else if (activeDialog === 'save') {
-        // Attendance is already persisted in real-time via Firestore.
-        // Nothing extra to flush — just dismiss the dialog.
         setActiveDialog(null);
 
       } else if (activeDialog === 'finalize') {
-
-        // ── STEP 1: Self-heal the teacherUid field if it still holds the
-        //    legacy display-name string instead of the real uid.
-        //    This ensures the Firestore rule  `resource.data.teacherUid == request.auth.uid`
-        //    passes on the very next write, even before re-deploying the updated rules.
         if (user) {
           const meetingSnap = await meetingRef.get();
           const stored = meetingSnap.data()?.teacherUid;
           if (stored && stored !== user.uid) {
-            // Overwrite with the real uid so rules evaluate correctly from now on.
             await meetingRef.update({
               teacherUid:  user.uid,
-              teacherName: stored, // preserve the original display name for reference
+              teacherName: stored,
             });
           }
         }
 
-        // ── STEP 2: Mark all still-unmarked students as absent (not present)
-        //    before locking the record.
         const attSnap = await meetingRef
           .collection('attendance')
           .where('status', '==', 'unmarked')
@@ -241,7 +280,6 @@ export function RollCallScreen() {
           await batch.commit();
         }
 
-        // ── STEP 3: Close the meeting
         await meetingRef.update({
           status:    'closed',
           closedAt:  firestore.FieldValue.serverTimestamp(),
@@ -256,7 +294,6 @@ export function RollCallScreen() {
       const msg: string = error?.message ?? String(error);
       console.error(`Dialog action "${activeDialog}" failed:`, msg);
 
-      // Determine a user-friendly message based on the Firestore error code
       if (msg.includes('permission-denied') || msg.includes('firestore/p')) {
         setDialogError(
           'Permission denied. Your session may have expired — please sign out and sign back in, then try again.',
@@ -271,9 +308,6 @@ export function RollCallScreen() {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
 
@@ -364,36 +398,40 @@ export function RollCallScreen() {
                       : 'No check-in recorded'}
                   </Text>
                 </View>
-                {!(skipPresent && student.status === 'present') && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+
+                  {/* Tappable Status Pill */}
+                  <TouchableOpacity
+                    activeOpacity={meetingStatus === 'open' ? 0.6 : 1}
+                    onPress={() => handleToggleStatus(student)}
+                  >
                     <StatusChip status={student.status} />
-                    {meetingStatus === 'open'
-                      && student.status !== 'late'
-                      && student.status !== 'absent' && (
-                      <TouchableOpacity
-                        style={{
-                          marginLeft: 4, paddingVertical: 4, paddingHorizontal: 10,
-                          borderRadius: 12, backgroundColor: palette.primary,
-                        }}
-                        onPress={async () => {
-                          try {
-                            await firestore()
-                              .collection('meetings')
-                              .doc(meetingId)
-                              .collection('attendance')
-                              .doc(student.studentUid)
-                              .update({ status: 'late' });
-                          } catch (e) {
-                            // silent — will surface on next sync
-                          }
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={{ color: palette.white, fontSize: 12 }}>Mark Late</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
+                  </TouchableOpacity>
+
+                  {/* Mark Late Button (Only shows when student is currently unmarked) */}
+                  {meetingStatus === 'open' && student.status === 'unmarked' && (
+                    <TouchableOpacity
+                      style={{
+                        paddingVertical: 6,
+                        paddingHorizontal: 12,
+                        borderRadius: 100,
+                        backgroundColor: palette.primary,
+                      }}
+                      onPress={() => handleMarkLate(student)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={{
+                        color: palette.white,
+                        fontSize: 10,
+                        fontFamily: typography.primaryBold,
+                        letterSpacing: 0.5
+                      }}>
+                        MARK LATE
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             ))
           )}

@@ -20,9 +20,25 @@ export const styles = StyleSheet.create({
   snapshotText: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
   snapshotPillWarning: { alignSelf: 'flex-start', backgroundColor: palette.secondarySoft, borderColor: palette.secondary, borderWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: 100 },
   snapshotTextWarning: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
-  deleteClassBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.bg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 100 },
+  deleteClassBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: '#FECACA', // Light red border
+    backgroundColor: '#FEF2F2', // Light red background
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 100
+  },
   deleteClassBtnDisabled: { opacity: 0.7 },
-  deleteClassText: { color: palette.ink, fontSize: 12, fontFamily: typography.primaryBold, letterSpacing: 0.4 },
+  deleteClassText: {
+    color: '#DC2626', // Destructive red text
+    fontSize: 12,
+    fontFamily: typography.primaryBold,
+    letterSpacing: 0.4
+  },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxxl, gap: spacing.md },
   emptyStateText: { color: palette.muted, fontFamily: typography.primaryRegular, textAlign: 'center', fontSize: 14 },
 

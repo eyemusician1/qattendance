@@ -673,12 +673,14 @@ export function ClassScreen() {
           style={[
             styles.toastContainer,
             {
-              bottom: insets.bottom + 24,
+              // 1. Anchored to the top, safely below the status bar
+              top: insets.top + spacing.md,
               opacity: toastAnim,
               transform: [{
                 translateY: toastAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [20, 0],
+                  // 2. Changed from 20 to -20 so it slides DOWN into view
+                  outputRange: [-20, 0],
                 })
               }]
             }

@@ -28,15 +28,15 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
 
-  // Real-time Data States
   const [teacherStats, setTeacherStats] = useState({ activeClasses: 0, totalStudents: 0 });
   const [studentStats, setStudentStats] = useState({ enrolledClasses: 0, pendingRequests: 0 });
 
-  // Extract initial for the fallback avatar
   const initial = fullName ? fullName.charAt(0).toUpperCase() : '?';
+  const firstName = fullName ? fullName.split(' ')[0] : 'User';
+  const displayRole = role ? role.toUpperCase() : 'STUDENT';
 
-  // ── REAL-TIME DATA LISTENERS ──
   useEffect(() => {
     if (!user) return;
 
@@ -83,35 +83,33 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
 
-      {/* ── HEADER WITH GOOGLE DRIVE STYLE AVATAR ── */}
+      {/* ── COHESIVE HEADER ── */}
       <View style={styles.header}>
-        <Text style={styles.pageTitle}>Profile</Text>
-        <View style={styles.avatarWrap}>
+        <View style={styles.headerTextGroup}>
+          <Text style={styles.pageTitle}>Profile</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.avatarWrap}
+          activeOpacity={0.8}
+          onPress={() => setShowAccountModal(true)}
+        >
           {user?.photoURL ? (
             <Image source={{ uri: user.photoURL }} style={styles.avatarImage} />
           ) : (
             <Text style={styles.avatarText}>{initial}</Text>
           )}
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* ── FIXED CONTENT (NO SCROLLING) ── */}
       <View style={styles.fixedContent}>
 
-        {/* Identity Row */}
-        <View style={styles.identityRow}>
-          <Text style={styles.userName} numberOfLines={1}>{fullName || 'Unknown User'}</Text>
-          <View style={styles.roleChip}>
-            <Text style={styles.roleChipText}>{role.toUpperCase()}</Text>
-          </View>
-        </View>
-
-        {/* ── DYNAMIC ROLE-BASED STATS BENTO ── */}
         {role === 'admin' ? (
           <View style={styles.bentoRow}>
             <View style={styles.bentoSquare}>
               <View style={styles.bentoIconWrap}>
-                <Ionicons name="server-outline" size={20} color={palette.ink} />
+                <Ionicons name="server-outline" size={24} color={palette.ink} />
               </View>
               <View>
                 <Text style={styles.statValueText}>Good</Text>
@@ -120,7 +118,7 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
             </View>
             <View style={styles.bentoSquare}>
               <View style={styles.bentoIconWrap}>
-                <Ionicons name="shield-checkmark-outline" size={20} color={palette.ink} />
+                <Ionicons name="shield-checkmark-outline" size={24} color={palette.ink} />
               </View>
               <View>
                 <Text style={styles.statValueText}>Master</Text>
@@ -132,7 +130,7 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           <View style={styles.bentoRow}>
             <View style={styles.bentoSquare}>
               <View style={styles.bentoIconWrap}>
-                <Ionicons name="book-outline" size={20} color={palette.ink} />
+                <Ionicons name="book-outline" size={24} color={palette.ink} />
               </View>
               <View>
                 <Text style={styles.statValue}>{teacherStats.activeClasses}</Text>
@@ -141,7 +139,7 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
             </View>
             <View style={styles.bentoSquare}>
               <View style={styles.bentoIconWrap}>
-                <Ionicons name="people-outline" size={20} color={palette.ink} />
+                <Ionicons name="people-outline" size={24} color={palette.ink} />
               </View>
               <View>
                 <Text style={styles.statValue}>{teacherStats.totalStudents}</Text>
@@ -153,7 +151,7 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           <View style={styles.bentoRow}>
             <View style={styles.bentoSquare}>
               <View style={styles.bentoIconWrap}>
-                <Ionicons name="book-outline" size={20} color={palette.ink} />
+                <Ionicons name="book-outline" size={24} color={palette.ink} />
               </View>
               <View>
                 <Text style={styles.statValue}>{studentStats.enrolledClasses}</Text>
@@ -162,7 +160,7 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
             </View>
             <View style={styles.bentoSquare}>
               <View style={styles.bentoIconWrap}>
-                <Ionicons name="time-outline" size={20} color={palette.ink} />
+                <Ionicons name="time-outline" size={24} color={palette.ink} />
               </View>
               <View>
                 <Text style={styles.statValue}>{studentStats.pendingRequests}</Text>
@@ -172,13 +170,12 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           </View>
         )}
 
-        {/* ── PREFERENCES LIST ── */}
         <Text style={styles.sectionLabel}>PREFERENCES</Text>
         <View style={styles.settingsCard}>
           <View style={styles.settingRow}>
             <View style={styles.settingRowLeft}>
               <View style={styles.settingIconWrap}>
-                <Ionicons name="notifications-outline" size={18} color={palette.ink} />
+                <Ionicons name="notifications-outline" size={22} color={palette.ink} />
               </View>
               <Text style={styles.settingText}>Push Notifications</Text>
             </View>
@@ -195,28 +192,81 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           <TouchableOpacity style={styles.settingRow} activeOpacity={0.7}>
             <View style={styles.settingRowLeft}>
               <View style={styles.settingIconWrap}>
-                <Ionicons name="help-circle-outline" size={18} color={palette.ink} />
+                <Ionicons name="help-circle-outline" size={22} color={palette.ink} />
               </View>
               <Text style={styles.settingText}>Help & Support</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={palette.muted} />
+            <Ionicons name="chevron-forward" size={22} color={palette.muted} />
           </TouchableOpacity>
         </View>
 
-        {/* Flexible spacer dynamically pushes the Sign Out button to the bottom */}
         <View style={styles.spacer} />
 
-        {/* ── SIGN OUT BUTTON ── */}
+        {/* ── ENLARGED SIGN OUT BUTTON ── */}
         <TouchableOpacity
           style={styles.signOutBtn}
           activeOpacity={0.7}
           onPress={() => setShowLogoutModal(true)}
         >
-          <Ionicons name="log-out-outline" size={22} color={palette.primary} />
+          <Ionicons name="log-out-outline" size={26} color={palette.primary} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
       </View>
+
+      {/* ── GOOGLE-STYLE ACCOUNT SWITCHER MODAL ── */}
+      <Modal visible={showAccountModal} transparent animationType="fade" onRequestClose={() => setShowAccountModal(false)}>
+        <View style={styles.accountModalBackdrop}>
+          <TouchableWithoutFeedback onPress={() => setShowAccountModal(false)}>
+            <View style={StyleSheet.absoluteFillObject} />
+          </TouchableWithoutFeedback>
+
+          <View style={styles.accountModalCard}>
+
+            <View style={styles.accountModalHeader}>
+              <Text style={styles.accountEmail}>{user?.email || 'No email provided'}</Text>
+              <TouchableOpacity onPress={() => setShowAccountModal(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <Ionicons name="close" size={26} color={palette.ink} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.accountHero}>
+              <View style={styles.accountAvatarLarge}>
+                {user?.photoURL ? (
+                  <Image source={{ uri: user.photoURL }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.accountAvatarTextLarge}>{initial}</Text>
+                )}
+              </View>
+
+              <Text style={styles.accountGreeting}>Hi, {firstName}!</Text>
+
+              <TouchableOpacity style={styles.manageAccountBtn} activeOpacity={0.7}>
+                <Text style={styles.manageAccountBtnText}>Manage your Account</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.accountDivider} />
+
+            {/* Current Active Account Row */}
+            <View style={styles.accountRow}>
+              <View style={styles.accountRowAvatar}>
+                {user?.photoURL ? (
+                  <Image source={{ uri: user.photoURL }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.accountRowAvatarText}>{initial}</Text>
+                )}
+              </View>
+              <View style={styles.accountRowTextGroup}>
+                <Text style={styles.accountRowName}>{fullName || 'Unknown User'}</Text>
+                <Text style={styles.accountRowRole}>{displayRole}</Text>
+              </View>
+              <Ionicons name="checkmark-circle" size={24} color={palette.primary} />
+            </View>
+
+          </View>
+        </View>
+      </Modal>
 
       {/* ── LOGOUT CONFIRMATION MODAL ── */}
       <Modal visible={showLogoutModal} transparent animationType="fade" onRequestClose={() => setShowLogoutModal(false)}>
@@ -226,35 +276,19 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           </TouchableWithoutFeedback>
 
           <View style={styles.modalCard}>
-
             <View style={styles.modalIconWrap}>
               <Ionicons name="log-out-outline" size={32} color={palette.primary} />
             </View>
-
             <Text style={styles.modalTitle}>Sign Out</Text>
             <Text style={styles.modalSub}>Are you sure you want to sign out of your account? You will need to log back in to access your classes.</Text>
-
             <View style={styles.modalBtnRow}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setShowLogoutModal(false)}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowLogoutModal(false)} activeOpacity={0.7}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalConfirmBtn}
-                onPress={() => {
-                  setShowLogoutModal(false);
-                  onLogout();
-                }}
-                activeOpacity={0.85}
-              >
+              <TouchableOpacity style={styles.modalConfirmBtn} onPress={() => { setShowLogoutModal(false); onLogout(); }} activeOpacity={0.85}>
                 <Text style={styles.modalConfirmText}>Sign Out</Text>
               </TouchableOpacity>
             </View>
-
           </View>
         </View>
       </Modal>
@@ -271,18 +305,48 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start', // Aligns avatar with the top of the "Profile" text
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.xl,
+  },
+  headerTextGroup: {
+    flexShrink: 1,
+    paddingRight: spacing.md,
   },
   pageTitle: {
     color: palette.ink,
     fontSize: 42,
     fontFamily: typography.primaryBold,
+    marginBottom: spacing.xs,
+    lineHeight: 48,
+    includeFontPadding: false,
   },
-
-  // ── GOOGLE DRIVE STYLE AVATAR ──
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  greetingText: {
+    color: palette.muted,
+    fontSize: 16,
+    fontFamily: typography.primaryMedium,
+    flexShrink: 1,
+  },
+  roleChip: {
+    backgroundColor: palette.white,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  roleChipText: {
+    color: palette.ink,
+    fontFamily: typography.primaryBold,
+    fontSize: 10,
+    letterSpacing: 1,
+  },
   avatarWrap: {
     width: 52,
     height: 52,
@@ -308,45 +372,15 @@ const styles = StyleSheet.create({
     fontFamily: typography.primaryBold,
   },
 
-  // ── FIXED DIMENSIONS (No Scrolling) ──
   fixedContent: {
     flex: 1,
     paddingHorizontal: spacing.xl,
-    paddingBottom: 110, // Safely clears the bottom tabs
+    paddingBottom: 110,
   },
   spacer: {
-    flex: 1, // Devours all empty space and forces elements apart
+    flex: 1,
   },
 
-  // ── IDENTITY ROW ──
-  identityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.xxxl,
-  },
-  userName: {
-    flexShrink: 1,
-    color: palette.ink,
-    fontSize: 24,
-    fontFamily: typography.primaryBold,
-  },
-  roleChip: {
-    backgroundColor: palette.white,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    borderRadius: 100,
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
-  roleChipText: {
-    color: palette.ink,
-    fontFamily: typography.primaryBold,
-    fontSize: 10,
-    letterSpacing: 1,
-  },
-
-  // ── STATS BENTO ──
   bentoRow: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -355,12 +389,12 @@ const styles = StyleSheet.create({
   bentoSquare: {
     flex: 1,
     backgroundColor: palette.white,
-    borderRadius: 20,
-    padding: spacing.lg,
+    borderRadius: 24,
+    padding: spacing.xl,
     borderWidth: 1,
     borderColor: palette.border,
     justifyContent: 'space-between',
-    minHeight: 115,
+    minHeight: 125,
     elevation: 2,
     shadowColor: palette.ink,
     shadowOffset: { width: 0, height: 4 },
@@ -368,45 +402,44 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
   },
   bentoIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: palette.bg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: palette.border,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   statValue: {
     color: palette.ink,
-    fontSize: 26,
+    fontSize: 32,
     fontFamily: typography.primaryBold,
   },
   statValueText: {
     color: palette.ink,
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: typography.primaryBold,
   },
   statLabel: {
     color: palette.muted,
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: typography.primaryMedium,
     marginTop: 2,
   },
 
-  // ── PREFERENCES ──
   sectionLabel: {
     color: palette.muted,
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: typography.primaryBold,
     letterSpacing: 1,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
     marginLeft: spacing.sm,
   },
   settingsCard: {
     backgroundColor: palette.white,
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: palette.border,
     overflow: 'hidden',
@@ -415,8 +448,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
   },
   settingRowLeft: {
     flexDirection: 'row',
@@ -424,120 +457,168 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   settingIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: palette.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   settingText: {
     color: palette.ink,
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: typography.primaryMedium,
   },
   settingDivider: {
     height: 1,
     backgroundColor: palette.border,
-    marginLeft: 66,
+    marginLeft: 74,
   },
 
-  // ── SIGN OUT BTN ──
+  // ── ENLARGED SIGN OUT BUTTON ──
   signOutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.lg,
+    paddingVertical: 20, // Taller, more prominent tap target
     backgroundColor: '#FFF5F5',
     borderRadius: 100,
     borderWidth: 1,
     borderColor: '#FEE2E2',
+    elevation: 2,
+    shadowColor: palette.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   signOutText: {
     color: palette.primary,
     fontFamily: typography.primaryBold,
-    fontSize: 15,
+    fontSize: 18, // Larger text
     letterSpacing: 0.5,
   },
 
-  // ── CUSTOM LOGOUT MODAL ──
-  modalBackdrop: {
+  // ── GOOGLE-STYLE ACCOUNT MODAL ──
+  accountModalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
-    backgroundColor: palette.white,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: spacing.xxl,
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  accountModalCard: {
+    width: '100%',
+    backgroundColor: palette.white,
+    borderRadius: 32,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
     elevation: 24,
     shadowColor: palette.ink,
-    shadowOffset: { width: 0, height: -12 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 32,
+    overflow: 'hidden',
   },
-  modalIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 1.5,
-    borderColor: palette.primary,
-    backgroundColor: '#FFF5F5',
+  accountModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    marginBottom: spacing.xl,
+  },
+  accountEmail: {
+    color: palette.ink,
+    fontSize: 16,
+    fontFamily: typography.primaryBold,
+  },
+  accountHero: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.xl,
+  },
+  accountAvatarLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: palette.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  accountAvatarTextLarge: {
+    color: palette.white,
+    fontSize: 36,
+    fontFamily: typography.primaryBold,
+  },
+  accountGreeting: {
+    color: palette.ink,
+    fontSize: 26,
+    fontFamily: typography.primaryBold,
     marginBottom: spacing.lg,
   },
-  modalTitle: {
-    color: palette.ink,
-    fontSize: 22,
-    fontFamily: typography.primaryBold,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  modalSub: {
-    color: palette.muted,
-    fontSize: 15,
-    fontFamily: typography.primaryRegular,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: spacing.xxl,
-    paddingHorizontal: spacing.md,
-  },
-  modalBtnRow: {
-    flexDirection: 'row',
-    width: '100%',
-    gap: spacing.md,
-  },
-  modalCancelBtn: {
-    flex: 1,
+  manageAccountBtn: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: 10,
+    borderRadius: 100,
     borderWidth: 1,
     borderColor: palette.border,
-    paddingVertical: 16,
-    borderRadius: 100,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  modalCancelText: {
+  manageAccountBtnText: {
     color: palette.ink,
+    fontSize: 14,
     fontFamily: typography.primaryBold,
-    fontSize: 15,
-    letterSpacing: 0.5,
   },
-  modalConfirmBtn: {
-    flex: 1,
+  accountDivider: {
+    height: 1,
+    backgroundColor: palette.border,
+    width: '100%',
+  },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xl,
+    gap: spacing.md,
+  },
+  accountRowAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: palette.primary,
-    paddingVertical: 16,
-    borderRadius: 100,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  modalConfirmText: {
+  accountRowAvatarText: {
     color: palette.white,
+    fontSize: 16,
     fontFamily: typography.primaryBold,
-    fontSize: 15,
-    letterSpacing: 0.5,
   },
+  accountRowTextGroup: {
+    flex: 1,
+  },
+  accountRowName: {
+    color: palette.ink,
+    fontSize: 16,
+    fontFamily: typography.primaryBold,
+  },
+  accountRowRole: {
+    color: palette.muted,
+    fontSize: 13,
+    fontFamily: typography.primaryMedium,
+  },
+
+  // ── LOGOUT MODAL ──
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: palette.white, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: spacing.xxl, alignItems: 'center', elevation: 24 },
+  modalIconWrap: { width: 64, height: 64, borderRadius: 32, borderWidth: 1.5, borderColor: palette.primary, backgroundColor: '#FFF5F5', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
+  modalTitle: { color: palette.ink, fontSize: 22, fontFamily: typography.primaryBold, textAlign: 'center', marginBottom: spacing.sm },
+  modalSub: { color: palette.muted, fontSize: 15, fontFamily: typography.primaryRegular, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xxl, paddingHorizontal: spacing.md },
+  modalBtnRow: { flexDirection: 'row', width: '100%', gap: spacing.md },
+  modalCancelBtn: { flex: 1, borderWidth: 1, borderColor: palette.border, paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  modalCancelText: { color: palette.ink, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
+  modalConfirmBtn: { flex: 1, backgroundColor: palette.primary, paddingVertical: 16, borderRadius: 100, alignItems: 'center', justifyContent: 'center' },
+  modalConfirmText: { color: palette.white, fontFamily: typography.primaryBold, fontSize: 15, letterSpacing: 0.5 },
 });

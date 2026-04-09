@@ -208,7 +208,6 @@ export function ProfileScreen({ onLogout }: ProfileScreenProps) {
           activeOpacity={0.7}
           onPress={() => setShowLogoutModal(true)}
         >
-          <Ionicons name="log-out-outline" size={26} color={palette.primary} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
